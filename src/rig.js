@@ -396,7 +396,7 @@ function drawSide(canvas, st) {
     ctx.fillStyle = 'rgba(208,59,59,.12)'; ctx.fillRect(0, 0, w, h);
     const by = Math.max(V.padTop + 46, h * 0.36);
     txt(ctx, sMode ? 'STAGE AND WALL TOPPLED' : 'TOPPLED', V.ox - 0.4 * V.s, by, { font: '700 ' + clamp(w * 0.07, 34, 60) * (sMode ? 0.62 : 1) + 'px ' + F.disp, align: 'center', color: '#fff', halo: 'rgba(160,30,30,.95)', haloW: 8 });
-    txt(ctx, 'Add ballast, straps or a lower stage, then press Replay', V.ox - 0.4 * V.s, by + 24, { font: '500 13px ' + F.sans, align: 'center', color: '#fff', halo: 'rgba(120,20,20,.9)', haloW: 5 });
+    txt(ctx, 'Add ballast, straps or a lower stage, then press Run again', V.ox - 0.4 * V.s, by + 24, { font: '500 13px ' + F.sans, align: 'center', color: '#fff', halo: 'rgba(120,20,20,.9)', haloW: 5 });
   }
   if (insetOn) drawInset(ctx, V, Vr, st, ink, off);
 }

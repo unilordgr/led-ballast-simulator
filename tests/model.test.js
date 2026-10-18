@@ -230,6 +230,65 @@ for (let n = 1; n <= 10; n++) {   // outdoors at the top of a force gives the sh
   ok('5 mm of sway at 1.5 Hz on 60 kg per base never lifts it', r.sim.maxPhi === 0);
   r = runSim(base({ indoorCase: 'knock', knock: { kgf: 25, h: 1.2, from: 'both', dur: 0.3, share: 2 }, ballastAuto: false, ballastPer: 9.055 }), 30);
   ok('a 25 kgf knock does not lift the sheet wall', r.sim.maxPhi === 0);
+
+  /* ---- Start and End simulation: a gust, a knock or a quake happens once and the wall settles; the other loads go on until it is ended ---- */
+  const mk = (o) => { const S = base(o), D = M.derive(S), sim = new M.Sim(); sim.setRig(D, S); sim.reset(); return { S, D, sim }; };
+  const kn2 = (o) => ({ indoorCase: 'knock', knock: Object.assign({ kgf: 25, h: 1.2, from: 'both', dur: 0.3, share: 2 }, o) });
+  eq('a door gust is over when its time is up', mk({ indoorCase: 'door', door: { v: 5.4, dur: 1.2 } }).sim.doneAt, 2.2, 1e-12);
+  eq('a knock is over when it ends', mk(kn2()).sim.doneAt, 1.3, 1e-12);
+  eq('an earthquake is over when the record ends', mk({ indoorCase: 'quake', quake: { pga: 0.24, floor: 1, dur: 12 } }).sim.doneAt, 13, 1e-12);
+  for (const id of ['draught', 'sway', 'notional']) ok(id + ' has no end of its own', mk({ indoorCase: id }).sim.doneAt === null);
+  ok('outdoor wind has no end of its own', mk({ mode: 'outdoor' }).sim.doneAt === null);
+
+  // the ongoing loads are still there a long time later
+  ok('the draught is still blowing after 100 s', mk({ indoorCase: 'draught' }).sim.loadAt(100).u > 0.99);
+  ok('the code load is still there after 100 s', mk({ indoorCase: 'notional' }).sim.loadAt(100).u > 0.99);
+  { const { sim } = mk({ indoorCase: 'sway' }); let pk = 0; for (let t = 100; t < 102; t += 0.01) pk = Math.max(pk, Math.abs(sim.loadAt(t).u)); ok('the stage is still swaying after 100 s', pk > 0.99, pk); }
+  { const { sim } = mk({ mode: 'outdoor', gust: 0.3 }); let pk = 0; for (let t = 100; t < 160; t += 0.1) pk = Math.max(pk, sim.loadAt(t).u); ok('outdoors the wind is still blowing after 100 s', pk > 0.5, pk); }
+
+  // the one-off events: quiet for the first second, then once, then gone for good, and the wall ends up still
+  const events = [
+    ['door gust', { indoorCase: 'door', door: { v: 5.4, dur: 0.4 }, ballastAuto: false, ballastPer: 9.055 }, 'u'],
+    ['knock', Object.assign(kn2({ kgf: 60, from: 'both' }), { ballastAuto: false, ballastPer: 9.055 }), 'u'],
+    ['earthquake', { indoorCase: 'quake', ballastAuto: false, ballastPer: 30 }, 'lam'],
+  ];
+  for (const [name, o, key] of events) {
+    const { D, sim } = mk(o);
+    let early = 0, late = 0, lastMove = 0;
+    for (let i = 0; i < 45 * 240; i++) {
+      sim.step(1 / 240);
+      const v = Math.abs(sim.loadAt(sim.t)[key]);
+      if (sim.t < 1) early = Math.max(early, v);
+      if (sim.t > sim.doneAt + 0.05) late = Math.max(late, v);
+      if (sim.phi > 0 || sim.omega !== 0) lastMove = sim.t;
+    }
+    ok(name + ': nothing happens in the first second', early === 0, early);
+    ok(name + ': the load is gone once the event is over and never comes back', late === 0, late);
+    ok(name + ': the wall lifted a little but did not topple', sim.maxPhi > 0 && !sim.toppled && sim.toppledAt === -1, [sim.maxPhi, sim.toppled]);
+    ok(name + ': it comes to rest, flat, after the event', sim.phi === 0 && sim.omega === 0 && lastMove < sim.doneAt + 6, [sim.phi, sim.omega, lastMove, sim.doneAt]);
+  }
+
+  // when it does topple it says when, and a restart forgets it
+  r = runSim(base(Object.assign({ indoorCase: 'door', door: { v: 5.4, dur: 2 } }, sheetOn)), 20);
+  ok('a toppled wall knows when it went', r.sim.toppled && r.sim.toppledAt > 1 && r.sim.toppledAt <= r.sim.t, [r.sim.toppledAt, r.sim.t]);
+  r.sim.reset();
+  ok('a restart forgets that it toppled', !r.sim.toppled && r.sim.toppledAt === -1 && r.sim.maxPhi === 0 && r.sim.t === 0);
+  r = runSim(base(Object.assign({ indoorCase: 'quake', ballastAuto: false, ballastPer: 9.055 }, {})), 40);
+  ok('the quake topples a light wall, and toppledAt is during the shaking', r.sim.toppled && r.sim.toppledAt > 1 && r.sim.toppledAt < 1 + 12, r.sim.toppledAt);
+  r = runSim(base({ indoorCase: 'door', door: { v: 5.4, dur: 0.2 }, ballastAuto: false, ballastPer: 9.055 }), 20);
+  ok('a wall that did not topple has no toppled time', r.sim.toppledAt === -1);
+
+  // a knock "from either side" is pushed the weaker way, which is what the picture and the simulation use
+  { const o = Object.assign(kn2({ kgf: 60 }), { ballastAuto: false, ballastPer: 9.055, ballastPos: 'rear' });
+    const both = mk(o), rear = mk(Object.assign({}, o, { knock: Object.assign({}, o.knock, { from: 'rear' }) })), front = mk(Object.assign({}, o, { knock: Object.assign({}, o.knock, { from: 'front' }) }));
+    const weak = both.D.sides.fwd.SFact <= both.D.sides.back.SFact ? 1 : -1;
+    ok('the weaker way for this wall is forward (onto the front toe)', weak === 1 && both.D.dir === 'rear', [both.D.sides.fwd.SFact, both.D.sides.back.SFact, both.D.dir]);
+    ok('the simulation pushes the weaker way', both.sim.pushSign === weak);
+    eq('the safety factor from either side is the weaker side', both.D.SFact, Math.min(rear.D.SFact, front.D.SFact), 1e-9);
+    ok('pushing from the front is the easy one', front.D.SFact > rear.D.SFact);
+    for (const w of [both, rear]) for (let i = 0; i < 6 * 240; i++) w.sim.step(1 / 240);
+    ok('either side, and the rear push, make the wall lift by about the same', both.sim.maxPhi > 0 && Math.abs(both.sim.maxPhi - rear.sim.maxPhi) <= 0.25 * rear.sim.maxPhi, [both.sim.maxPhi, rear.sim.maxPhi]);
+  }
 }
 
 const D1 = M.derive(base({ mode: 'outdoor' }));

@@ -8,6 +8,15 @@ It started from the spreadsheet *Calculation for indoor stacking system of balla
 
 It is one HTML file with no dependencies. There is nothing to install: open `index.html` in any browser, or host it as a static page.
 
+## How to use it
+
+1. **Set up the wall.** The settings on the left are in tabs: **Wall** (cabinets, size, bases, ballast), **Stage & straps**, **Load** (what pushes on the wall) and **Advanced**. Choosing a load, such as *Knock* or *Earthquake*, only picks the load: it never touches the wall you set up.
+2. **Let it work out the ballast, or enter your own.** *Work it out for me* finds the least ballast per base that gives your safety margin. *I'll enter it* lets you type or drag a weight, and offers a button to use the weight the load needs.
+3. **Read the verdict.** The strip under the picture always shows stable, marginal or will tip over, the safety factor, the ballast needed and the ballast you have. The tabs below it hold the **Summary**, the **Drawings** and the **Details** (the sheet, cell by cell).
+4. **Press Start simulation.** Nothing moves until you do. A door gust, a knock or an earthquake happens once, a second in, and then the wall settles and you are told whether it held or toppled. Wind, a draught, the code load and stage sway go on until you press **End simulation**. You can pause, restart, change the speed, or change the wall while it runs.
+
+**New wall** puts every setting back to the starting values (and *Undo* brings your wall back). **Examples** loads a whole ready-made wall, such as the sheet wall, a strong draught, a door gust, an earthquake or a gale. Your wall is kept in this browser, so it is there when you come back. On a phone the picture stays at the top while you change the settings below it. Space starts, pauses or restarts the simulation and Escape ends it.
+
 ## What you can do
 
 - **Cabinets:** 500 × 500 mm or 500 × 1000 mm, with weights from Unilumin datasheets (Uslim2, Uslim4, UGC, USlim-O3, USlim-O4), the sheet's own 26.4 kg/m², or your own number.
@@ -24,9 +33,9 @@ It is one HTML file with no dependencies. There is nothing to install: open `ind
   - a wind dial from above,
   - a stability map of ballast against wind speed,
   - a bending profile.
-- **Animation:** wind, gusts, pushes and shaking run live. A wall that is pushed past its tipping point rocks over, and one held by straps stays up and leans. Under shaking it rocks about either toe, and a brief gust or push that lifts the wall can leave it standing.
+- **Animation:** once you press Start, wind, gusts, pushes and shaking run live. A wall that is pushed past its tipping point rocks over, and one held by straps stays up and leans. Under shaking it rocks about either toe, and a brief gust or push that lifts the wall can leave it standing. When that happens but the safety factor says it should tip, the result says it held only because the load was brief.
 - **The sheet, cell by cell:** the original formulas with your current numbers filled in.
-- Quick scenarios: *Sheet example*, *No ballast*, *Strong draught*, *Front draught*, *Outdoor breeze*, *Outdoor gale*, *On a stage*, *Top straps*.
+- **Examples:** *Sheet wall*, *No ballast*, *Strong draught*, *Front draught*, *Door gust*, *Knock*, *Stage wobble*, *Earthquake*, *Outdoor breeze*, *Outdoor gale*, *On a stage* and *Top straps*. Each replaces the whole wall, and *Undo* brings yours back.
 
 The defaults reproduce the sheet: a 14 m × 7 m wall of 500 × 500 cabinets on 14 bases needs 9.06 kg of ballast per base (126.8 kg in all) at a safety factor of 1.5.
 
@@ -115,6 +124,6 @@ python3 tests/sheet_ref.py          # rewrites tests/sheet_cases.json from an in
 | `index.html` | The built page: everything in one file. Do not edit by hand. |
 | `src/model.js` | The physics. No page code, so Node can run it too. |
 | `src/scene.js`, `rig.js`, `front.js`, `views.js` | Canvas drawing: environments, side view, 3D front view, rear view, dial, map, bending chart. |
-| `src/app.js` | State, controls, scenarios, animation loop. |
+| `src/app.js` | State, controls, the saved wall, New wall and Examples, the Start and End flow, animation loop. |
 | `src/body.html`, `src/style.css` | Markup and styling (light and dark). |
 | `tests/` | Physics tests, fuzz test, and a Python copy of the sheet used as reference. |

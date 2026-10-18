@@ -58,35 +58,35 @@ svg.ic{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-wid
 .brand .mark{width:38px;height:38px;flex:none}
 .brand h1{margin:0;font:600 25px/1.05 var(--font-display);letter-spacing:.025em;text-transform:uppercase}
 .brand p{margin:3px 0 0;color:var(--ink2);font-size:12.5px}
-.scn{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.scn-l{font:600 12px var(--font-display);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);margin-right:2px}
-.chip{height:30px;padding:0 11px;border:1px solid var(--line);background:var(--panel);border-radius:6px;font-size:12.5px;font-weight:500;color:var(--ink);white-space:nowrap}
-.chip:hover{background:var(--panel2);border-color:var(--ink3)}
 
 /* ---------- grid ---------- */
 .grid{display:grid;gap:14px;grid-template-columns:minmax(0,1fr);align-items:start}
-.view,.rail,.rest,.results,.more{grid-column:1}
+.rail,.main{grid-column:1;min-width:0}
+.main{display:grid;gap:14px}
+.stickbox{display:grid;gap:8px;min-width:0}
 @media (max-width:899px){
-  .view{position:sticky;top:env(safe-area-inset-top,0px);z-index:6;box-shadow:0 8px 14px -10px rgba(0,0,0,.5)}
+  .main{display:contents}                               /* on a phone the picture comes first and stays put while you change the settings below it */
+  .stickbox{order:1}
+  .rail{order:2}
+  .main>:not(.stickbox){order:3}
+  .stickbox{position:sticky;top:env(safe-area-inset-top,0px);z-index:6;background:var(--bg);padding-bottom:6px;box-shadow:0 10px 14px -12px rgba(0,0,0,.55)}
+  html{scroll-padding-top:310px}
 }
+@media (max-width:899px) and (max-height:600px){.stickbox{position:static}html{scroll-padding-top:0}}
 @media (min-width:900px){
-  .grid{grid-template-columns:316px minmax(0,1fr);grid-template-rows:auto auto auto 1fr}
-  .rail{grid-column:1;grid-row:1 / span 4;position:sticky;top:10px;max-height:calc(100vh - 20px);overflow-y:auto;overscroll-behavior:contain}
-  .view{grid-column:2;grid-row:1}.rest{grid-column:2;grid-row:2}.results{grid-column:2;grid-row:3}.more{grid-column:2;grid-row:4}
-}
-@media (min-width:1300px){
-  .grid{grid-template-columns:316px minmax(0,1fr) 366px;grid-template-rows:auto 1fr auto}
-  .rail{grid-row:1 / span 3}                                   /* the controls stay pinned right down to the checks, so nothing slides under them */
-  .view{grid-column:2;grid-row:1}.rest{grid-column:2;grid-row:2;align-self:start}
-  .results{grid-column:3;grid-row:1 / span 2}
-  .more{grid-column:2 / -1;grid-row:3}
+  .grid{grid-template-columns:372px minmax(0,1fr)}
+  .rail{grid-row:1}
+  .main{grid-column:2;grid-row:1}
+  .rail{position:sticky;top:76px;max-height:calc(100vh - 88px);overflow-y:auto;overscroll-behavior:contain}
+  .top{position:sticky;top:0;z-index:30;background:var(--bg);margin:-12px 0 0;padding:12px 0 10px}
+  html{scroll-padding-top:84px}
 }
 .more{display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
 @media (min-width:760px){.more{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
 .more>.sec{border-top:0}
 
 /* ---------- rails & panels ---------- */
-.rail,.results,.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);min-width:0}
+.rail,.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);min-width:0}
 .sec{padding:14px 16px;border-top:1px solid var(--line)}
 .sec:first-child{border-top:0}
 .sec>h2,.sec>summary{margin:0 0 10px;font:600 13px var(--font-display);letter-spacing:.11em;text-transform:uppercase;color:var(--ink2);display:flex;align-items:center;gap:8px}
@@ -146,7 +146,7 @@ input[type=range]:disabled{opacity:.45;cursor:not-allowed}
 /* ---------- main view ---------- */
 .view{margin:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#0b111a;box-shadow:var(--shadow)}
 .view-wrap{position:relative;height:clamp(300px,54vh,640px)}
-@media (max-width:899px){.view-wrap{height:clamp(220px,34vh,320px)}}
+@media (max-width:899px){.view-wrap{height:clamp(190px,27vh,270px)}}
 .view-wrap canvas{display:block;width:100%;height:100%}
 .hud{position:absolute;z-index:2;display:flex;gap:8px}
 .hud.tl{left:10px;top:10px;flex-direction:column;align-items:flex-start;max-width:calc(100% - 20px)}
@@ -167,7 +167,10 @@ input[type=range]:disabled{opacity:.45;cursor:not-allowed}
 .icon-btn[aria-pressed="true"]{border-color:var(--accent);background:linear-gradient(var(--accent-wash),var(--accent-wash)),var(--hud)}
 .icon-btn.attn{border-color:var(--crit);box-shadow:0 0 0 2px var(--crit)}
 .hud .seg{background:var(--hud);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
-@media (max-width:560px){.icon-btn span{display:none}.icon-btn{padding:0 8px}.live{gap:10px}}
+.icon-btn .long{display:none}
+@media (min-width:1180px){.icon-btn .long{display:inline}}
+.icon-btn.spd{display:none;font:600 12.5px var(--font-mono);min-width:40px;justify-content:center}
+@media (max-width:560px){.icon-btn span{display:none}.icon-btn{padding:0 8px}.live{gap:10px}.hud.tl .live div:nth-child(n+3){display:none}#segSpeed{display:none}.icon-btn.spd{display:inline-flex}}
 .legend{display:flex;gap:6px 12px;flex-wrap:wrap;padding:4px 9px;border-radius:7px;background:var(--hud);border:1px solid var(--line);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);font-size:11.5px;color:var(--ink2)}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
 .legend .ln{display:inline-block;width:14px;height:0;border-top:2px solid;margin-right:5px;vertical-align:3px}
@@ -181,7 +184,7 @@ input[type=range]:disabled{opacity:.45;cursor:not-allowed}
 .fig>figcaption .sub{margin-left:auto;font:400 12px var(--font-body);letter-spacing:0;text-transform:none;color:var(--ink3);text-align:right}
 .fig canvas{display:block;width:100%}
 #rear{height:clamp(270px,32vw,360px);touch-action:pan-y;cursor:pointer}
-#plan{height:clamp(270px,32vw,360px);touch-action:none;cursor:grab}
+#plan{height:clamp(270px,32vw,360px);touch-action:pan-y;cursor:grab}
 #plan.drag{cursor:grabbing}
 .fig .foot{padding:8px 14px 11px;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;font-size:12px;color:var(--ink2);border-top:1px solid var(--line2)}
 .fig .foot i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
@@ -268,9 +271,9 @@ details.tv>summary:hover{color:var(--ink)}
 #front{display:block;width:100%;height:clamp(310px,44vw,470px);touch-action:pan-y;cursor:grab}
 #front.drag{cursor:grabbing}
 .hud.tl2{left:10px;top:10px}
-.hud.tr2{right:10px;top:10px;flex-wrap:wrap;justify-content:flex-end;max-width:calc(100% - 20px)}
+.hud.tr2{right:10px;top:10px;flex-direction:column;align-items:flex-end;gap:6px;max-width:calc(100% - 20px)}
 .hud.bl2{left:10px;bottom:8px}
-@media (max-width:640px){.hud.tl2 .live{gap:10px}.hud.tr2{top:auto;bottom:8px;right:10px}.hud.bl2{display:none}}
+@media (max-width:640px){.hud.tl2 .live{gap:10px}.hud.tr2{top:auto;bottom:8px;right:10px;flex-direction:row;flex-wrap:wrap;justify-content:flex-end}.hud.bl2{display:none}}
 #bendC{touch-action:pan-y}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 
@@ -289,6 +292,94 @@ table.cmp td.sf[data-s="marginal"]{color:var(--warn-ink)}
 table.cmp td.sf[data-s="tipping"]{color:var(--crit-ink)}
 table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radius:4px;background:var(--accent-wash);color:var(--ink2);font:600 10px var(--font-body);letter-spacing:.04em;text-transform:uppercase}
 
+
+/* ---------- top bar, tabs, run controls, verdict strip ---------- */
+.actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.menu{position:relative}
+.menu-pop{position:absolute;right:0;top:calc(100% + 6px);z-index:40;min-width:272px;max-height:70vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.28);padding:6px}
+.menu-pop button{display:block;width:100%;text-align:left;padding:8px 10px;border:0;background:none;border-radius:6px;font-weight:500;font-size:13.5px}
+.menu-pop button:hover,.menu-pop button:focus-visible{background:var(--accent-wash)}
+.menu-pop button small{display:block;font-weight:400;font-size:12px;color:var(--ink3)}
+.menu-h{padding:8px 10px 4px;font:600 11px var(--font-display);letter-spacing:.1em;text-transform:uppercase;color:var(--ink3)}
+.btn.pri,.btn-run{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.pri:hover,.btn-run:hover{background:var(--accent);filter:brightness(1.1);border-color:var(--accent)}
+.btn-run{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:34px;padding:0 14px;border:1px solid var(--accent);border-radius:8px;font-weight:600;font-size:13.5px;box-shadow:var(--shadow)}
+.btn-run .ic{width:16px;height:16px;fill:currentColor;stroke:none}
+.btn .ic.chev{width:14px;height:14px}
+.runctl{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.icon-btn.end{border-color:var(--crit);color:var(--crit-ink)}
+
+.tabs{display:flex;gap:2px;padding:6px 6px 0;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs [role=tab]{flex:1 1 auto;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:42px;padding:0 8px;border:0;border-bottom:3px solid transparent;background:transparent;color:var(--ink2);font:600 13.5px var(--font-body);white-space:nowrap;border-radius:7px 7px 0 0}
+.tabs [role=tab]:hover{color:var(--ink);background:var(--panel2)}
+.tabs [role=tab][aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.tn{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--panel2);border:1px solid var(--line);font:600 11px var(--font-mono)}
+[aria-selected="true"]>.tn{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.rail>.tabs{position:sticky;top:0;z-index:3;background:var(--panel);border-radius:10px 10px 0 0}
+.pane{min-width:0}
+.pane:focus{outline:none}
+.pane-next{padding:4px 16px 18px;display:flex;justify-content:flex-end;border-top:1px solid var(--line);padding-top:14px}
+.pane-next .ic{width:15px;height:15px}
+.pane-next .btn-run{flex:1}
+.rtabs{display:grid;gap:12px;min-width:0}
+.rtabs>.tabs.rt{padding:0;border-bottom:1px solid var(--line)}
+.rtabs>.tabs.rt [role=tab]{flex:0 0 auto;padding:0 18px}
+.rpane{display:grid;gap:14px;min-width:0}
+.rpane>.sec,.detailgrid>.sec{background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow)}
+.detailgrid{display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:1150px){
+  .detailgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #rp-summary{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
+  #rp-summary>.verdict{grid-column:1 / -1}
+  #rp-summary>#cmpSec[hidden]+.sec{grid-column:1 / -1}
+}
+#aboutBox>summary{margin:0}
+#aboutBox .foot-note{margin:12px 0 0;max-width:none}
+
+.vstrip{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding:9px 14px;background:var(--panel);border:1px solid var(--line);border-left:5px solid var(--good);border-radius:10px;box-shadow:var(--shadow);font-size:13px;min-width:0}
+.vstrip[data-s="marginal"]{border-left-color:var(--warn)}
+.vstrip[data-s="tipping"]{border-left-color:var(--crit)}
+.vs-a{display:flex;align-items:center;gap:8px}
+.vs-a .ic{width:20px;height:20px}
+.vstrip[data-s="stable"] .vs-a .ic{color:var(--good)}
+.vstrip[data-s="marginal"] .vs-a .ic{color:var(--warn)}
+.vstrip[data-s="tipping"] .vs-a .ic{color:var(--crit)}
+.vs-l{font:700 17px var(--font-display);letter-spacing:.07em;text-transform:uppercase}
+.vs-sf b{font:600 19px var(--font-body)}
+.vs-sf small{color:var(--ink2);font-size:12px}
+.vs-b b{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.vs-c{margin-left:auto;color:var(--ink2)}
+.vs-r{flex:1 0 100%;display:flex;align-items:center;gap:8px;margin-top:3px;padding-top:7px;border-top:1px solid var(--line);font-size:13px;min-width:0}
+.vs-r .ic{width:18px;height:18px;flex:none}
+.vs-r b{font:700 15px var(--font-display);letter-spacing:.07em;text-transform:uppercase}
+.vs-r span{color:var(--ink2);min-width:0}
+.vs-r[data-s="held"] .ic,.vs-r[data-s="held"] b{color:var(--good-ink)}
+.vs-r[data-s="toppled"] .ic,.vs-r[data-s="toppled"] b{color:var(--crit-ink)}
+.tag{display:inline-block;padding:0 6px;border-radius:4px;background:var(--accent-wash);color:var(--ink2);font:600 10.5px var(--font-body);letter-spacing:.05em;text-transform:uppercase;vertical-align:1px}
+.tag[hidden]{display:none}
+.link{border:0;background:none;color:var(--accent);font:inherit;font-weight:600;text-decoration:underline;padding:0;cursor:pointer}
+@media (max-width:640px){.vs-c{display:none}.vstrip{padding:7px 10px;gap:2px 12px;font-size:12.5px}.vs-l{font-size:15px}}
+
+.toast{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:10px;padding:8px 8px 8px 16px;background:var(--ink);color:var(--bg);border-radius:10px;box-shadow:0 8px 26px rgba(0,0,0,.35);font-size:13px;max-width:calc(100% - 24px)}
+.toast .btn{background:transparent;color:inherit;border-color:rgba(127,127,127,.6)}
+.toast .btn:hover{background:rgba(127,127,127,.25)}
+.toast-x{border:0;background:none;color:inherit;font-size:20px;line-height:1;padding:0 8px;opacity:.7}
+.toast-x:hover{opacity:1}
+
+/* the controls are easier to hit on a phone */
+@media (max-width:640px){
+  .btn{height:40px}.btn.sm{height:36px}
+  .seg button{min-height:38px}.seg.tiny button{min-height:30px}
+  .field{height:40px}.field input{font-size:16px;width:64px}
+  .sel{height:42px;font-size:16px}
+  .tabs [role=tab]{min-height:46px;padding:0 8px;font-size:13px}.tx{display:none}
+  .brand p{display:none}
+  .actions .btn span{display:inline}
+  .hud .icon-btn{height:34px}.btn-run{height:38px}
+}
+@media (prefers-contrast:more){.tn,.tag{border:1px solid var(--ink)}}
+
 [hidden]{display:none!important}
 </style>
 </head>
@@ -303,11 +394,15 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
     <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8.5 6v12M15.5 6v12"/></symbol>
     <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5z"/></symbol>
     <symbol id="i-inset" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><rect x="11" y="11" width="7" height="7" rx="1"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6.5" y="6.5" width="11" height="11" rx="1.6"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
   </defs>
 </svg>
 
 <div class="app">
-  <header class="top">
+  <header class="top" id="topbar">
     <div class="brand">
       <svg class="mark" viewBox="0 0 40 40" aria-hidden="true">
         <rect x="1" y="1" width="38" height="38" rx="8" fill="var(--panel2)" stroke="var(--line)"/>
@@ -324,73 +419,39 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
         <p>Tip-over, bending, straps and stage checks for stacked LED screens, built from an indoor stacking ballast sheet</p>
       </div>
     </div>
-    <div class="scn" role="group" aria-label="Example scenarios">
-      <span class="scn-l">Try</span>
-      <button class="chip" type="button" data-scn="sheet">Sheet example</button>
-      <button class="chip" type="button" data-scn="noballast">No ballast</button>
-      <button class="chip" type="button" data-scn="draft">Strong draught</button>
-      <button class="chip" type="button" data-scn="front">Front draught</button>
-      <button class="chip" type="button" data-scn="door">Door gust</button>
-      <button class="chip" type="button" data-scn="knock">Knock</button>
-      <button class="chip" type="button" data-scn="wobble">Stage wobble</button>
-      <button class="chip" type="button" data-scn="quake">Earthquake</button>
-      <button class="chip" type="button" data-scn="breeze">Outdoor breeze</button>
-      <button class="chip" type="button" data-scn="gale">Outdoor gale</button>
-      <button class="chip" type="button" data-scn="stage">On a stage</button>
-      <button class="chip" type="button" data-scn="straps">Top straps</button>
+    <div class="actions">
+      <button class="btn" type="button" id="btnNew" title="Start again with a fresh wall"><svg class="ic"><use href="#i-plus"/></svg><span>New wall</span></button>
+      <div class="menu" id="exWrap">
+        <button class="btn" type="button" id="btnEx" aria-haspopup="menu" aria-expanded="false" aria-controls="exMenu"><span>Examples</span><svg class="ic"><use href="#i-chev"/></svg></button>
+        <div class="menu-pop" id="exMenu" role="menu" aria-label="Example walls" hidden>
+          <div class="menu-h">Indoors</div>
+          <button type="button" role="menuitem" data-ex="sheet">Sheet wall<small>14 × 7 m, ballast as the sheet says</small></button>
+          <button type="button" role="menuitem" data-ex="noballast">No ballast<small>the same wall with nothing on the bases</small></button>
+          <button type="button" role="menuitem" data-ex="draft">Strong draught<small>sheet ballast, Beaufort 4</small></button>
+          <button type="button" role="menuitem" data-ex="front">Front draught<small>air from the audience side</small></button>
+          <button type="button" role="menuitem" data-ex="door">Door gust<small>5.4 m/s for 1.2 s on the sheet wall</small></button>
+          <button type="button" role="menuitem" data-ex="knock">Knock<small>a 60 kgf shove at 1.2 m high</small></button>
+          <button type="button" role="menuitem" data-ex="wobble">Stage wobble<small>1.2 m stage that sways</small></button>
+          <button type="button" role="menuitem" data-ex="quake">Earthquake<small>0.24 g, the sheet wall</small></button>
+          <div class="menu-h">Outdoors</div>
+          <button type="button" role="menuitem" data-ex="breeze">Outdoor breeze<small>8 m/s with gusts</small></button>
+          <button type="button" role="menuitem" data-ex="gale">Outdoor gale<small>14 m/s, 300 kg per base</small></button>
+          <button type="button" role="menuitem" data-ex="stage">On a stage<small>1.6 m stage in a breeze</small></button>
+          <button type="button" role="menuitem" data-ex="straps">Top straps<small>straps down to the floor behind the stage</small></button>
+        </div>
+      </div>
     </div>
   </header>
 
   <main class="grid" id="grid">
-    <!-- ================= side view ================= -->
-    <figure class="view" id="viewMain">
-      <div class="view-wrap" id="sideWrap">
-        <canvas id="side" role="img" aria-label="Side view: LED screen, back frame, base plate, ballast, stage, straps and wind arrows, with the tipping pivot"></canvas>
-        <div class="hud tl">
-          <div class="pill" id="pill" data-s="stable" role="status"><svg class="ic"><use href="#i-check"/></svg><span id="pillText">Stable</span></div>
-          <dl class="live" id="live">
-            <div><dt id="liveWindK">Wind now</dt><dd id="liveWind">3.3 m/s</dd></div>
-            <div><dt id="liveForceK">Force</dt><dd id="liveForce">68 kgf</dd></div>
-            <div><dt>Tilt</dt><dd id="liveTilt">0.00°</dd></div>
-            <div><dt>Top moves</dt><dd id="liveTop">0 mm</dd></div>
-          </dl>
-        </div>
-        <div class="hud tr">
-          <button class="icon-btn" type="button" id="btnReplay" title="Stand the screen up and run the wind again"><svg class="ic"><use href="#i-replay"/></svg><span>Replay</span></button>
-          <button class="icon-btn" type="button" id="btnPause" aria-pressed="false" title="Pause the simulation"><svg class="ic"><use href="#i-pause"/></svg></button>
-          <div class="seg tiny" id="segSpeed" role="radiogroup" aria-label="Simulation speed">
-            <button type="button" role="radio" aria-checked="true" data-v="1">1×</button>
-            <button type="button" role="radio" aria-checked="false" data-v="2">2×</button>
-            <button type="button" role="radio" aria-checked="false" data-v="4">4×</button>
-          </div>
-          <button class="icon-btn" type="button" id="btnInset" aria-pressed="true" title="Show or hide the zoomed base detail"><svg class="ic"><use href="#i-inset"/></svg><span>Base detail</span></button>
-        </div>
-        <div class="hud bl">
-          <div class="legend" aria-hidden="true">
-            <span><i style="background:var(--c-screen)"></i>Screen</span>
-            <span><i style="background:var(--c-frame)"></i>Back frame</span>
-            <span><i style="background:#e9b422"></i>Base plate</span>
-            <span><i style="background:var(--c-ballast)"></i>Ballast</span>
-            <span><i style="background:#d6409f"></i><em id="legForce" style="font-style:normal">Wind force</em></span>
-            <span><i style="background:#ef4444"></i>Tipping pivot</span>
-            <span id="legStrap"><i style="background:#ffb020"></i>Strap</span>
-            <span id="legStage"><i style="background:#8a97a8"></i>Stage</span>
-          </div>
-        </div>
+    <aside class="rail" id="rail" aria-label="Wall and load settings">
+      <div class="tabs" role="tablist" aria-label="Settings" id="setTabs">
+        <button type="button" role="tab" id="tab-wall" data-tab="wall" aria-controls="pane-wall" aria-selected="true"><span class="tn">1</span><span class="tl">Wall</span></button>
+        <button type="button" role="tab" id="tab-stage" data-tab="stage" aria-controls="pane-stage" aria-selected="false" tabindex="-1"><span class="tn">2</span><span class="tl">Stage<span class="tx"> &amp; straps</span></span></button>
+        <button type="button" role="tab" id="tab-load" data-tab="load" aria-controls="pane-load" aria-selected="false" tabindex="-1"><span class="tn">3</span><span class="tl">Load</span></button>
+        <button type="button" role="tab" id="tab-adv" data-tab="adv" aria-controls="pane-adv" aria-selected="false" tabindex="-1"><span class="tl">Advanced</span></button>
       </div>
-    </figure>
-
-    <!-- ================= controls ================= -->
-    <aside class="rail" id="rail" aria-label="Controls">
-      <section class="sec">
-        <h2>Environment</h2>
-        <div class="seg big" id="segMode" role="radiogroup" aria-label="Environment">
-          <button type="button" role="radio" aria-checked="true" data-v="indoor">Indoor</button>
-          <button type="button" role="radio" aria-checked="false" data-v="outdoor">Outdoor</button>
-        </div>
-        <p class="hint" id="modeHint"></p>
-      </section>
-
+      <div class="pane" id="pane-wall" role="tabpanel" aria-labelledby="tab-wall" tabindex="-1">
       <section class="sec">
         <h2>LED screen <span class="sub" id="screenSub"></span></h2>
         <div class="ctl">
@@ -421,7 +482,6 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
           <p class="hint" id="K-h"></p>
         </div>
       </section>
-
       <section class="sec">
         <h2>Bases <span class="sub">back frames</span></h2>
         <div class="ctl">
@@ -430,17 +490,17 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
           <p class="hint" id="N-h"></p>
         </div>
       </section>
-
       <section class="sec">
         <h2>Ballast <span class="sub">at the rear of each base</span></h2>
         <div class="seg big" id="segBal" role="radiogroup" aria-label="Ballast mode">
-          <button type="button" role="radio" aria-checked="true" data-v="auto">Auto (sheet result)</button>
-          <button type="button" role="radio" aria-checked="false" data-v="manual">Manual</button>
+          <button type="button" role="radio" aria-checked="true" data-v="auto">Work it out for me</button>
+          <button type="button" role="radio" aria-checked="false" data-v="manual">I'll enter it</button>
         </div>
         <div class="ctl" style="margin-top:12px">
           <label for="B-n">Weight per base</label>
           <div class="ctl-line"><input type="range" id="B-r" min="0" max="1000" step="1" aria-label="Ballast per base slider"><span class="field"><input type="number" id="B-n" min="0" max="5000" step="0.5" inputmode="decimal"><span class="u">kg</span></span></div>
           <p class="hint" id="B-h"></p>
+          <button type="button" class="btn sm" id="btnUseNeed" hidden>Use what is needed</button>
         </div>
         <div class="ctl">
           <div class="lab">Position on the base <small id="posNote"></small></div>
@@ -457,10 +517,12 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
             <span class="field"><input type="number" id="selVal" min="0" max="5000" step="0.5" inputmode="decimal" aria-label="Ballast on the selected base"><span class="u">kg</span></span>
             <button type="button" class="btn" id="selPlus" aria-label="Add ballast to this base">+</button>
           </div>
-          <div class="row" style="margin-top:8px"><button type="button" class="btn sm" id="selAll">Copy to all bases</button><span class="hint" style="margin:0">Click a base in the rear view to edit it.</span></div>
+          <div class="row" style="margin-top:8px"><button type="button" class="btn sm" id="selAll">Copy to all bases</button><span class="hint" style="margin:0">To edit one base, open Drawings, then Rear view.</span></div>
         </div>
       </section>
-
+        <div class="pane-next"><button type="button" class="btn pri" data-goto="stage">Next: Stage and straps <svg class="ic"><use href="#i-arrow"/></svg></button></div>
+      </div>
+      <div class="pane" id="pane-stage" role="tabpanel" aria-labelledby="tab-stage" tabindex="-1" hidden>
       <section class="sec">
         <h2>Stage <span class="sub" id="stageSub"></span></h2>
         <div class="seg big" id="segStage" role="radiogroup" aria-label="Stage">
@@ -502,7 +564,6 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
           </div>
         </div>
       </section>
-
       <section class="sec">
         <h2>Back straps <span class="sub" id="restSub"></span></h2>
         <div class="seg" id="segRest" role="radiogroup" aria-label="Back restraint type">
@@ -553,7 +614,17 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
           </div>
         </div>
       </section>
-
+        <div class="pane-next"><button type="button" class="btn pri" data-goto="load">Next: Load <svg class="ic"><use href="#i-arrow"/></svg></button></div>
+      </div>
+      <div class="pane" id="pane-load" role="tabpanel" aria-labelledby="tab-load" tabindex="-1" hidden>
+      <section class="sec">
+        <h2>Environment</h2>
+        <div class="seg big" id="segMode" role="radiogroup" aria-label="Environment">
+          <button type="button" role="radio" aria-checked="true" data-v="indoor">Indoor</button>
+          <button type="button" role="radio" aria-checked="false" data-v="outdoor">Outdoor</button>
+        </div>
+        <p class="hint" id="modeHint"></p>
+      </section>
       <section class="sec" id="secLoad">
         <h2 id="loadH">Wind</h2>
         <div id="indoorPick" hidden>
@@ -563,7 +634,7 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
             <button type="button" role="radio" aria-checked="false" data-v="knock" title="Someone leans on it, bumps it or pushes a trolley into it">Knock</button>
             <button type="button" role="radio" aria-checked="false" data-v="sway" title="The deck wobbles under dancers or a crowd">Stage sway</button>
             <button type="button" role="radio" aria-checked="false" data-v="quake" title="The ground shakes">Earthquake</button>
-            <button type="button" role="radio" aria-checked="false" data-v="notional" title="The sideways load building rules ask for when nothing else is known">Code min.</button>
+            <button type="button" role="radio" aria-checked="false" data-v="notional" title="The sideways load building rules ask for when nothing else is known">Building code</button>
           </div>
           <p class="hint" id="caseHint"></p>
         </div>
@@ -714,17 +785,24 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
           <p class="hint" id="DIR-h"></p>
         </div>
       </section>
-
       <section class="sec">
-        <h2>Safety</h2>
+        <h2>Safety margin</h2>
         <div class="ctl">
-          <label for="SF-n">Required safety factor <small>sheet: 1.2 to 1.5</small></label>
+          <label for="SF-n">Safety margin <small>times stronger than the load</small></label>
           <div class="ctl-line"><input type="range" id="SF-r" min="1" max="2.5" step="0.05" aria-label="Safety factor slider"><span class="field"><input type="number" id="SF-n" min="1" max="3" step="0.05" inputmode="decimal"><span class="u">×</span></span></div>
         </div>
+        <div class="dirbtns" style="margin-top:8px">
+          <button type="button" class="btn sm" data-sf="1.2">1.2×</button>
+          <button type="button" class="btn sm" data-sf="1.5">1.5× usual</button>
+          <button type="button" class="btn sm" data-sf="2">2×</button>
+        </div>
+        <p class="hint">The sheet asks for 1.2 to 1.5. Higher is safer and needs more ballast.</p>
       </section>
-
-      <details class="sec" id="adv">
-        <summary>Advanced</summary>
+        <div class="pane-next"><button type="button" class="btn-run" id="btnStart3"><svg class="ic"><use href="#i-play"/></svg><span>Start simulation</span></button></div>
+      </div>
+      <div class="pane" id="pane-adv" role="tabpanel" aria-labelledby="tab-adv" tabindex="-1" hidden>
+      <section class="sec">
+        <h2>Advanced</h2>
         <div class="ctl">
           <label for="EI-n">Frame stiffness EI <small>per base, MN·m²</small></label>
           <div class="ctl-line"><input type="range" id="EI-r" min="0" max="1000" step="1" aria-label="Frame stiffness slider"><span class="field"><input type="number" id="EI-n" min="0.05" max="200" step="0.1" inputmode="decimal"><span class="u">MN·m²</span></span></div>
@@ -760,12 +838,95 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
           </div>
           <p class="hint">The sheet counts 4 kg per 1 m row. Here it is per metre of height, so 500 mm cabinets do not double the frame.</p>
         </div>
-        <button type="button" class="btn" id="btnReset">Reset to the sheet example</button>
-      </details>
+        <button type="button" class="btn" id="btnReset">Reset advanced values</button>
+      </section>
+      </div>
     </aside>
 
-    <!-- ================= front view + rear view + plan ================= -->
-    <div class="rest" id="rest">
+    <div class="main" id="main">
+      <div class="stickbox">
+        <figure class="view" id="viewMain">
+          <div class="view-wrap" id="sideWrap">
+            <canvas id="side" role="img" aria-label="Side view: LED screen, back frame, base plate, ballast, stage, straps and wind arrows, with the tipping pivot"></canvas>
+            <div class="hud tl">
+              <div class="pill" id="pill" data-s="stable" role="status"><svg class="ic"><use href="#i-check"/></svg><span id="pillText">Stable</span></div>
+              <dl class="live" id="live">
+                <div><dt id="liveWindK">Wind now</dt><dd id="liveWind">3.3 m/s</dd></div>
+                <div><dt id="liveForceK">Force</dt><dd id="liveForce">68 kgf</dd></div>
+                <div><dt>Tilt</dt><dd id="liveTilt">0.00°</dd></div>
+                <div><dt>Top moves</dt><dd id="liveTop">0 mm</dd></div>
+              </dl>
+            </div>
+            <div class="hud tr">
+              <button class="btn-run" type="button" id="btnStart"><svg class="ic"><use href="#i-play"/></svg><span>Start simulation</span></button>
+              <div class="runctl" id="runCtl" hidden>
+                <button class="icon-btn" type="button" id="btnPause" aria-pressed="false" title="Pause the simulation"><svg class="ic"><use href="#i-pause"/></svg></button>
+                <button class="icon-btn" type="button" id="btnReplay" title="Run it again from the start"><svg class="ic"><use href="#i-replay"/></svg><span>Restart</span></button>
+                <div class="seg tiny" id="segSpeed" role="radiogroup" aria-label="Simulation speed">
+                  <button type="button" role="radio" aria-checked="true" data-v="1">1×</button>
+                  <button type="button" role="radio" aria-checked="false" data-v="2">2×</button>
+                  <button type="button" role="radio" aria-checked="false" data-v="4">4×</button>
+                </div>
+                <button class="icon-btn spd" type="button" id="btnSpeed" title="Change the speed" aria-label="Simulation speed">1×</button>
+                <button class="icon-btn end" type="button" id="btnEnd" title="End the simulation and stand the wall up"><svg class="ic"><use href="#i-stop"/></svg><span>End<span class="long"> simulation</span></span></button>
+              </div>
+              <button class="icon-btn" type="button" id="btnInset" aria-pressed="true" title="Show or hide the zoomed base detail"><svg class="ic"><use href="#i-inset"/></svg><span>Base detail</span></button>
+            </div>
+            <div class="hud bl">
+              <div class="legend" aria-hidden="true">
+                <span><i style="background:var(--c-screen)"></i>Screen</span>
+                <span><i style="background:var(--c-frame)"></i>Back frame</span>
+                <span><i style="background:#e9b422"></i>Base plate</span>
+                <span><i style="background:var(--c-ballast)"></i>Ballast</span>
+                <span><i style="background:#d6409f"></i><em id="legForce" style="font-style:normal">Wind force</em></span>
+                <span><i style="background:#ef4444"></i>Tipping pivot</span>
+                <span id="legStrap"><i style="background:#ffb020"></i>Strap</span>
+                <span id="legStage"><i style="background:#8a97a8"></i>Stage</span>
+              </div>
+            </div>
+          </div>
+        </figure>
+        <div class="vstrip" id="vstrip" data-s="stable" role="status">
+          <div class="vs-a"><svg class="ic" id="vsIcon"><use href="#i-check"/></svg><b class="vs-l" id="vsLabel">Stable</b><span class="vs-sf"><b id="vsSF">1.50×</b><small> needs <span id="vsReq">1.50×</span></small></span></div>
+          <div class="vs-b">Need <b id="vsNeed">9.1</b> · Have <b id="vsHave">9.1</b> kg per base <span class="tag" id="vsAuto">auto</span></div>
+          <div class="vs-c"><span id="vsLoad">Load</span> <button type="button" class="link" id="vsChange">Change</button></div>
+          <div class="vs-r" id="vsRes" data-s="" hidden><svg class="ic" id="vsResIcon"><use href="#i-check"/></svg><b id="vsResK">Held</b><span id="vsResT"></span></div>
+        </div>
+      </div>
+      <div class="rtabs">
+        <div class="tabs rt" role="tablist" aria-label="Results" id="resTabs">
+          <button type="button" role="tab" id="rt-summary" data-tab="summary" aria-controls="rp-summary" aria-selected="true"><span class="tl">Summary</span></button>
+          <button type="button" role="tab" id="rt-draw" data-tab="draw" aria-controls="rp-draw" aria-selected="false" tabindex="-1"><span class="tl">Drawings</span></button>
+          <button type="button" role="tab" id="rt-detail" data-tab="detail" aria-controls="rp-detail" aria-selected="false" tabindex="-1"><span class="tl">Details</span></button>
+        </div>
+        <div class="rpane" id="rp-summary" role="tabpanel" aria-labelledby="rt-summary" tabindex="-1">
+      <section class="sec verdict" id="verdict" data-s="stable">
+        <div class="vh"><svg class="ic" id="vIcon"><use href="#i-check"/></svg><span class="vl" id="vLabel">Stable</span></div>
+        <div class="hero"><span class="n" id="vSF">1.50</span><span class="of">safety factor<br>needs <b id="vReq">1.50</b> or more</span></div>
+        <div class="meter" id="meter" role="meter" aria-label="Safety factor" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1.5">
+          <div class="meter-fill" id="meterFill"></div>
+          <div class="tk up" id="tkTip" style="left:33.3%"><span>tips at 1.0</span></div>
+          <div class="tk dn" id="tkReq" style="left:50%"><span>needs 1.50</span></div>
+        </div>
+        <p class="vtext" id="vText" aria-live="polite"></p>
+      </section>
+      <section class="sec" id="cmpSec" hidden>
+        <h2>Indoor loads compared <span class="sub">on your ballast</span></h2>
+        <div class="tablewrap" style="max-height:none;border-top:0"><table class="data cmp" id="cmpTable"><thead><tr><th>Load</th><th>Safety factor</th><th>Ballast needed (kg/base)</th></tr></thead><tbody id="cmpRows"></tbody></table></div>
+        <p class="hint" id="cmpHint"></p>
+      </section>
+      <section class="sec">
+        <h2 id="limH">Ballast and wind limits</h2>
+        <div class="tiles">
+          <div class="tile"><div class="k">Needed per base</div><div class="v" id="tNeedPer">9.06<small>kg</small></div><div class="s" id="tNeedTot"></div></div>
+          <div class="tile"><div class="k">You have per base</div><div class="v" id="tYourPer">9.06<small>kg</small></div><div class="s" id="tYourTot"></div></div>
+          <div class="tile"><div class="k" id="tAllowK">Holds, with margin, up to</div><div class="v" id="tAllow">3.3<small>m/s</small></div><div class="s" id="tAllowS"></div></div>
+          <div class="tile"><div class="k" id="tTipK">Tips over at</div><div class="v" id="tTip">4.0<small>m/s</small></div><div class="s" id="tTipS"></div></div>
+        </div>
+      </section>
+        </div>
+        <div class="rpane" id="rp-draw" role="tabpanel" aria-labelledby="rt-draw" tabindex="-1" hidden>
+          <div class="rest" id="rest">
       <figure class="fig wide">
         <figcaption>Front view <span class="sub" id="frontSub">how the LED face moves in the wind</span></figcaption>
         <div class="frontwrap">
@@ -802,37 +963,10 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
         <canvas id="plan" role="img" aria-label="Plan view of the wall, its stage and straps, with a wind direction dial"></canvas>
         <div class="foot"><span id="planInfo"></span></div>
       </figure>
-    </div>
-
-    <!-- ================= results ================= -->
-    <aside class="results" id="results" aria-label="Results">
-      <section class="sec verdict" id="verdict" data-s="stable">
-        <div class="vh"><svg class="ic" id="vIcon"><use href="#i-check"/></svg><span class="vl" id="vLabel">Stable</span></div>
-        <div class="hero"><span class="n" id="vSF">1.50</span><span class="of">safety factor<br>needs <b id="vReq">1.50</b> or more</span></div>
-        <div class="meter" id="meter" role="meter" aria-label="Safety factor" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1.5">
-          <div class="meter-fill" id="meterFill"></div>
-          <div class="tk up" id="tkTip" style="left:33.3%"><span>tips at 1.0</span></div>
-          <div class="tk dn" id="tkReq" style="left:50%"><span>needs 1.50</span></div>
+          </div>
         </div>
-        <p class="vtext" id="vText" aria-live="polite"></p>
-      </section>
-
-      <section class="sec" id="cmpSec" hidden>
-        <h2>Indoor loads compared <span class="sub">on your ballast</span></h2>
-        <div class="tablewrap" style="max-height:none;border-top:0"><table class="data cmp" id="cmpTable"><thead><tr><th>Load</th><th>Safety factor</th><th>Needs kg/base</th></tr></thead><tbody id="cmpRows"></tbody></table></div>
-        <p class="hint" id="cmpHint"></p>
-      </section>
-
-      <section class="sec">
-        <h2 id="limH">Ballast and wind limits</h2>
-        <div class="tiles">
-          <div class="tile"><div class="k">Needed per base</div><div class="v" id="tNeedPer">9.06<small>kg</small></div><div class="s" id="tNeedTot"></div></div>
-          <div class="tile"><div class="k">You have per base</div><div class="v" id="tYourPer">9.06<small>kg</small></div><div class="s" id="tYourTot"></div></div>
-          <div class="tile"><div class="k" id="tAllowK">Holds, with margin, up to</div><div class="v" id="tAllow">3.3<small>m/s</small></div><div class="s" id="tAllowS"></div></div>
-          <div class="tile"><div class="k" id="tTipK">Tips over at</div><div class="v" id="tTip">4.0<small>m/s</small></div><div class="s" id="tTipS"></div></div>
-        </div>
-      </section>
-
+        <div class="rpane" id="rp-detail" role="tabpanel" aria-labelledby="rt-detail" tabindex="-1" hidden>
+          <div class="detailgrid">
       <section class="sec" id="bendSec">
         <h2>How it bends <span class="sub">illustrative stiffness</span></h2>
         <div class="tiles">
@@ -849,7 +983,6 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
         </div>
         <p class="hint" id="bendNote"></p>
       </section>
-
       <section class="sec">
         <h2>Moment balance <span class="sub">about the tipping toe, kg·m</span></h2>
         <div class="mom-row"><span class="k" id="momK">Wind × safety factor</span><span></span><span class="v" id="mWind">0</span></div>
@@ -865,7 +998,6 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
         </div>
         <p class="eq" id="eq"></p>
       </section>
-
       <section class="sec">
         <h2>Stability map <span class="sub" id="mapSub">ballast per base against wind</span></h2>
         <div class="mapwrap" id="mapWrap">
@@ -881,42 +1013,45 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
           <div class="tablewrap"><table class="data"><thead><tr><th id="mapTh1">Wind (m/s)</th><th id="mapTh2">Beaufort</th><th>Needed (kg/base)</th><th>Tips below (kg/base)</th></tr></thead><tbody id="mapRows"></tbody></table></div>
         </details>
       </section>
-    </aside>
-
-    <!-- ================= checks + sheet ================= -->
-    <div class="more" id="more">
+          </div>
+          <div class="more" id="more">
       <section class="panel sec">
         <h2>Checks</h2>
         <ul class="checks" id="checks"></ul>
       </section>
-
       <details class="panel sec" id="sheetBox">
         <summary>The sheet, cell by cell</summary>
         <table class="sheet" id="sheetTable"></table>
         <p class="hint">Same formulas as Sheet1, filled in with the current inputs. Outdoors, on a stage, with straps or for angled wind, the numbers use the peak wind pressure and the governing check.</p>
       </details>
+          </div>
+      <details class="panel sec" id="aboutBox">
+        <summary>How it works, assumptions and sources</summary>
+          <p class="foot-note">
+            <b>How it works.</b> The wind pushes on the whole screen at half its height plus 0.1 m. The screen, the back frame and the ballast try to hold it down about the toe of the base.
+            Following the sheet: <code>wind force × arm × safety factor = screen + frame + ballast moments</code>.
+            With wind from the rear the toe is under the screen (screen arm 0, frame arm 0.46 m, ballast arm 0.862 m). With wind from the front the toe is at the rear of the base (screen arm 0.922 m, frame and ballast 0.46 m).
+            Wind pressure is ½·1.25·v² (the sheet's table). The sheet's wind scale is the Beaufort scale, and picking a Beaufort force here uses the top of its speed range (force 6 is 13.8 m/s). Angled wind counts by cos θ. Outdoors, gusts raise the design wind to the peak speed, and the animation replays them.
+            <b>Indoors, wind is not the real load.</b> Air in a hall hardly moves, so the sheet's wind scale really stands in for sideways loads nobody has measured: a draught, a bump, a wobbling floor. Here you can pick them one by one.
+            A <i>door gust</i> is air at your speed for a few seconds. A <i>knock</i> is a push at one height shared by a few bases (the ergonomic limit for a whole-body push is about 23 kgf, and a braced person can reach about 70 kgf; CCOHS).
+            <i>Stage sway</i> moves the deck back and forth by a few millimetres, so every mass feels the acceleration (2π·f)²·amplitude. An <i>earthquake</i> shakes the ground; the Greek seismic zones design for 0.16, 0.24 and 0.36 g (Greek National Annex to Eurocode 8), and a rigid object on an upper floor feels up to 2.5 times the ground (EN 1998-1, 4.3.5).
+            The <i>code minimum</i> is the sideways load that temporary-works rules such as BS 5975 ask for when nothing else is known: 2.5% of the vertical load, a stand-in for out-of-plumb and rough handling.
+            For shaking the force on each mass is its weight times the acceleration, so the ballast itself is shaken too, and the wall can tip either way: the screen side is the weak one, because the screen's weight sits at the front toe. With "Auto" the ballast goes where it helps most: at the rear end for a forward tip, in the middle when the load can come from both sides.
+            The safety factor is the ratio of the tipping acceleration (or push, or gust) to yours, as in the sheet. It treats the load as steady, so it is cautious for short loads: the animation also lets the wall rock, and a brief gust or push that lifts the wall can leave it standing. A sudden load on a strapped wall can double the strap's pull, which the static number does not show.
+            <b>Straps and stage.</b> A strap, cable or truss is a spring from the screen to an anchor. The wall is also a cantilever that bends, so the strap only pulls as hard as the wall moves it, plus the lift of the base. The program finds the largest wind the wall can take before a strap reaches its rated load or the wall passes its tipping point.
+            On a stage it checks two ways of failing and shows the worse: the wall tipping on the deck, and the stage and wall tipping together about the stage edge.
+            <b>Assumptions.</b> Straps are hand-tight with no slack: a loose strap lets the wall start to fall before it pulls and then takes a shock load, so keep them tight. Bending stiffness is illustrative (about two 50×50×3 aluminium posts 0.38 m apart per base), set it to your frame in Advanced. Ratchet straps stretch up to 7% at rated load (EN 12195-2), steel cable 0.4%, a truss 0.03%.
+            Steeldeck stage decks are rated about 7.5 kN/m². Frame strength, cabinet locks, anchors and ground are not checked. Sliding is an extra check; the sheet assumes enough friction.
+            Beaufort 1 in the sheet's table lists 0.14 N/m² for 1.5 m/s, which should be 1.4, so 1.4 is used here.
+            Cabinet weights come from Unilumin datasheets (Uslim4 13 kg, Uslim2 7.8 kg, USlim-O3 14.8 kg, USlim-O4 32 to 34 kg) and a distributor listing (UGC 5.6 kg).
+            <b>This is a rough reference.</b> As the sheet itself says, it cannot replace a structural simulation or a practical test. Use it to see how a wall reacts and to size a first guess, and have a qualified rigger or engineer approve any real installation.
+          </p>
+      </details>
+        </div>
+      </div>
     </div>
   </main>
-
-  <p class="foot-note">
-    <b>How it works.</b> The wind pushes on the whole screen at half its height plus 0.1 m. The screen, the back frame and the ballast try to hold it down about the toe of the base.
-    Following the sheet: <code>wind force × arm × safety factor = screen + frame + ballast moments</code>.
-    With wind from the rear the toe is under the screen (screen arm 0, frame arm 0.46 m, ballast arm 0.862 m). With wind from the front the toe is at the rear of the base (screen arm 0.922 m, frame and ballast 0.46 m).
-    Wind pressure is ½·1.25·v² (the sheet's table). The sheet's wind scale is the Beaufort scale, and picking a Beaufort force here uses the top of its speed range (force 6 is 13.8 m/s). Angled wind counts by cos θ. Outdoors, gusts raise the design wind to the peak speed, and the animation replays them.
-    <b>Indoors, wind is not the real load.</b> Air in a hall hardly moves, so the sheet's wind scale really stands in for sideways loads nobody has measured: a draught, a bump, a wobbling floor. Here you can pick them one by one.
-    A <i>door gust</i> is air at your speed for a few seconds. A <i>knock</i> is a push at one height shared by a few bases (the ergonomic limit for a whole-body push is about 23 kgf, and a braced person can reach about 70 kgf; CCOHS).
-    <i>Stage sway</i> moves the deck back and forth by a few millimetres, so every mass feels the acceleration (2π·f)²·amplitude. An <i>earthquake</i> shakes the ground; the Greek seismic zones design for 0.16, 0.24 and 0.36 g (Greek National Annex to Eurocode 8), and a rigid object on an upper floor feels up to 2.5 times the ground (EN 1998-1, 4.3.5).
-    The <i>code minimum</i> is the sideways load that temporary-works rules such as BS 5975 ask for when nothing else is known: 2.5% of the vertical load, a stand-in for out-of-plumb and rough handling.
-    For shaking the force on each mass is its weight times the acceleration, so the ballast itself is shaken too, and the wall can tip either way: the screen side is the weak one, because the screen's weight sits at the front toe. With "Auto" the ballast goes where it helps most: at the rear end for a forward tip, in the middle when the load can come from both sides.
-    The safety factor is the ratio of the tipping acceleration (or push, or gust) to yours, as in the sheet. It treats the load as steady, so it is cautious for short loads: the animation also lets the wall rock, and a brief gust or push that lifts the wall can leave it standing. A sudden load on a strapped wall can double the strap's pull, which the static number does not show.
-    <b>Straps and stage.</b> A strap, cable or truss is a spring from the screen to an anchor. The wall is also a cantilever that bends, so the strap only pulls as hard as the wall moves it, plus the lift of the base. The program finds the largest wind the wall can take before a strap reaches its rated load or the wall passes its tipping point.
-    On a stage it checks two ways of failing and shows the worse: the wall tipping on the deck, and the stage and wall tipping together about the stage edge.
-    <b>Assumptions.</b> Straps are hand-tight with no slack: a loose strap lets the wall start to fall before it pulls and then takes a shock load, so keep them tight. Bending stiffness is illustrative (about two 50×50×3 aluminium posts 0.38 m apart per base), set it to your frame in Advanced. Ratchet straps stretch up to 7% at rated load (EN 12195-2), steel cable 0.4%, a truss 0.03%.
-    Steeldeck stage decks are rated about 7.5 kN/m². Frame strength, cabinet locks, anchors and ground are not checked. Sliding is an extra check; the sheet assumes enough friction.
-    Beaufort 1 in the sheet's table lists 0.14 N/m² for 1.5 m/s, which should be 1.4, so 1.4 is used here.
-    Cabinet weights come from Unilumin datasheets (Uslim4 13 kg, Uslim2 7.8 kg, USlim-O3 14.8 kg, USlim-O4 32 to 34 kg) and a distributor listing (UGC 5.6 kg).
-    <b>This is a rough reference.</b> As the sheet itself says, it cannot replace a structural simulation or a practical test. Use it to see how a wall reacts and to size a first guess, and have a qualified rigger or engineer approve any real installation.
-  </p>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden><span id="toastMsg"></span><button type="button" class="btn sm" id="toastUndo" hidden>Undo</button><button type="button" class="toast-x" id="toastX" aria-label="Dismiss">×</button></div>
 </div>
 
 <script>
@@ -1517,25 +1652,35 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
       if (!this.side) this.side = this.dirSign;
     }
     reset() {
-      this.t = 0; this.phi = 0; this.omega = 0; this.toppled = false; this.maxPhi = 0; this.impactAt = -1; this.lastU = 0; this.lam = 0; this.lamB = 0; this.Ph = 0; this.broken = false;
+      this.t = 0; this.phi = 0; this.omega = 0; this.toppled = false; this.toppledAt = -1; this.maxPhi = 0; this.impactAt = -1; this.lastU = 0; this.lam = 0; this.lamB = 0; this.Ph = 0; this.broken = false;
       this.side = this.dirSign || 1;                       // +1 tilting forward about the front toe, -1 backward about the rear toe
       this.pushDir = this.dirSign || 1;
       this.ground = 0;                                     // how far the floor is displaced, -1..1 of its peak
     }
     ramp(t) { const x = clamp(t / 1.5, 0, 1); return x * x * (3 - 2 * x); }
     windU(t) { const m = 1 + this.gust * gustN(t * 0.9 + 3); return this.ramp(t) * m / (1 + this.gust); }
+    /* A door gust, a knock or an earthquake happens once, one second after the start; the wind, the draught, the code load and the sway go on
+       until the simulation is ended. doneAt is when the event is over (null for loads that go on). */
+    get doneAt() {
+      switch (this.caseId) {
+        case 'door': return 1 + this.door.dur;
+        case 'knock': return 1 + this.knock.dur;
+        case 'quake': return 1 + this.quake.dur;
+        default: return null;
+      }
+    }
     /* the load at time t: u (speed or load fraction), lam (load factor, signed when it can push either way), gs (weight factor), g (floor displacement) */
     loadAt(t) {
       switch (this.caseId) {
-        case 'door': { const u = pulseAt(t, 1, this.door.dur, 0.5, 0.7, 6); return { u, lam: u * u, gs: 1, g: 0 }; }
+        case 'door': { const u = pulseAt(t, 1, this.door.dur, 0.5, 0.7, Infinity); return { u, lam: u * u, gs: 1, g: 0 }; }
         case 'knock': {
-          const d = this.knock.dur, u = pulseAt(t, 1, d, 0.05, 0.1, 5), n = t < 1 ? 0 : Math.floor((t - 1) / (d + 5));
-          const sgn = this.knock.from === 'rear' ? 1 : this.knock.from === 'front' ? -1 : (n % 2 === 0 ? 1 : -1);
+          const u = pulseAt(t, 1, this.knock.dur, 0.05, 0.1, Infinity);
+          const sgn = this.knock.from === 'rear' ? 1 : this.knock.from === 'front' ? -1 : this.pushSign;      // "worst side": the weaker way
           return { u, lam: this.shake ? sgn * u : u, gs: 1, g: 0 };
         }
         case 'sway': { const r = smoothstep(t / 2), s = Math.sin(2 * Math.PI * this.sway.f * t) * r; return { u: s, lam: s, gs: 1 - this.sway.bounce * Math.abs(s), g: s }; }
         case 'quake': {
-          const tau = t < 1 ? -1 : (t - 1) % (this.quake.dur + 6);
+          const tau = t < 1 ? -1 : t - 1;
           if (tau < 0) return { u: 0, lam: 0, gs: 1, g: 0 };
           const a = recAt(this.recs.h.acc, tau), v = recAt(this.recs.v.acc, tau);
           return { u: a, lam: a, gs: 1 + 0.5 * this.quake.pga * this.quake.floor * v, g: -recAt(this.recs.h.disp, tau) };
@@ -1578,7 +1723,7 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
         this.omega = this.omega > 0.25 ? -this.omega * 0.18 : 0;
       }
       if (this.phi > this.maxPhi) this.maxPhi = this.phi;
-      if (!this.toppled && this.phi > R.phiCrit && net > 0 && (!R.strap || this.broken || this.phi > 0.6)) this.toppled = true;
+      if (!this.toppled && this.phi > R.phiCrit && net > 0 && (!R.strap || this.broken || this.phi > 0.6)) { this.toppled = true; this.toppledAt = this.t; }
     }
     /* Shaking, or a push from either side. The wall rests flat, or rocks about the front toe (side +1) or the rear toe (side -1). Each toe has its
        own geometry. When it comes back to the floor the other toe lands, some energy is lost, and it goes on over to the other side if it still has the speed. */
@@ -1620,7 +1765,7 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
         this.omega = this.omega > 0.25 ? -this.omega * 0.18 : 0;
       }
       if (this.phi > this.maxPhi) this.maxPhi = this.phi;
-      if (!this.toppled && this.phi > r.phiCrit && this.omega > 0 && (!r.strap || this.broken || this.phi > 0.6)) this.toppled = true;
+      if (!this.toppled && this.phi > r.phiCrit && this.omega > 0 && (!r.strap || this.broken || this.phi > 0.6)) { this.toppled = true; this.toppledAt = this.t; }
     }
     liftMM(depth) { return Math.sin(this.phi) * depth * 1000; }
   }
@@ -2354,7 +2499,7 @@ function drawSide(canvas, st) {
     ctx.fillStyle = 'rgba(208,59,59,.12)'; ctx.fillRect(0, 0, w, h);
     const by = Math.max(V.padTop + 46, h * 0.36);
     txt(ctx, sMode ? 'STAGE AND WALL TOPPLED' : 'TOPPLED', V.ox - 0.4 * V.s, by, { font: '700 ' + clamp(w * 0.07, 34, 60) * (sMode ? 0.62 : 1) + 'px ' + F.disp, align: 'center', color: '#fff', halo: 'rgba(160,30,30,.95)', haloW: 8 });
-    txt(ctx, 'Add ballast, straps or a lower stage, then press Replay', V.ox - 0.4 * V.s, by + 24, { font: '500 13px ' + F.sans, align: 'center', color: '#fff', halo: 'rgba(120,20,20,.9)', haloW: 5 });
+    txt(ctx, 'Add ballast, straps or a lower stage, then press Run again', V.ox - 0.4 * V.s, by + 24, { font: '500 13px ' + F.sans, align: 'center', color: '#fff', halo: 'rgba(120,20,20,.9)', haloW: 5 });
   }
   if (insetOn) drawInset(ctx, V, Vr, st, ink, off);
 }
@@ -2993,7 +3138,7 @@ function drawBend(canvas, st) {
 const $ = (id) => document.getElementById(id);
 const S = M.defaults();
 const sim = new M.Sim();
-const ui = { selected: -1, speed: 1, paused: false, showInset: true, dragTop: 0, exag: 'auto', cam: 'three', camAz: CAM_PRESETS.three.az, camEl: CAM_PRESETS.three.el, camTAz: CAM_PRESETS.three.az, camTEl: CAM_PRESETS.three.el };
+const ui = { selected: -1, speed: 1, paused: false, run: 'idle', result: null, tab: 'wall', rtab: 'summary', showInset: true, dragTop: 0, exag: 'auto', cam: 'three', camAz: CAM_PRESETS.three.az, camEl: CAM_PRESETS.three.el, camTAz: CAM_PRESETS.three.az, camTEl: CAM_PRESETS.three.el };
 const hits = { rear: null, plan: null, map: null, hoverV: null };
 const st = { S, sim, ui, D: null, V: null, t: 0 };
 const SUB = 1 / 240;
@@ -3062,10 +3207,15 @@ function update() {
   st.D = D;
   const s2 = physSig();
   sim.setRig(D, S);
-  if (s2 !== sig) { sig = s2; sim.reset(); }
+  if (s2 !== sig) {                                    // the wall or the load changed: the run starts over and the last result is forgotten
+    sig = s2; sim.reset(); ui.result = null;
+    if (ui.run === 'finished') ui.run = 'idle';
+  }
   syncControls();
   renderText();
+  syncRunUI();
   dirty.rear = dirty.map = dirty.bend = true;
+  saveSoon();
 }
 function ensureManual() {
   if (S.ballastAuto) { S.ballastAuto = false; S.ballast = D.ballast.slice(); S.ballastPer = D.Wb / D.N; }
@@ -3077,6 +3227,180 @@ function setBallastAll(kg) {
 function setBase(i, kg) {
   ensureManual(); S.ballast[i] = clamp(roundBallast(Math.max(0, kg)), 0, 5000);
   S.ballastPer = S.ballast.reduce((a, b) => a + b, 0) / S.N;
+}
+
+/* ------------------------------------------------------------------ the saved wall, undo, New wall and Examples */
+const STORE_KEY = 'ledwall.v1';
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const ENUMS = { mode: ['indoor', 'outdoor'], cabSize: ['500x500', '500x1000'], profile: ['uniform', 'open', 'suburban', 'urban'], ballastPos: ['auto', 'rear', 'mid'], indoorCase: M.CASES };
+function mergeInto(def, src) {                   // anything missing or of the wrong type in a saved wall comes from the defaults
+  const out = {};
+  for (const k of Object.keys(def)) {
+    const d = def[k], v = src && typeof src === 'object' ? src[k] : undefined;
+    if (k === 'ballast') out[k] = Array.isArray(v) && v.length && v.length <= 200 && v.every((x) => typeof x === 'number' && isFinite(x)) ? v.slice() : null;
+    else if (d !== null && typeof d === 'object') out[k] = mergeInto(d, v);
+    else if (typeof d === 'number') out[k] = typeof v === 'number' && isFinite(v) ? v : d;
+    else if (typeof d === 'string') out[k] = typeof v === 'string' ? v : d;
+    else if (typeof d === 'boolean') out[k] = typeof v === 'boolean' ? v : d;
+    else out[k] = d;
+  }
+  return out;
+}
+function setState(src) {                          // S is shared with the drawings, so it is changed in place
+  const d = M.defaults(), m = mergeInto(d, src);
+  for (const k in ENUMS) if (ENUMS[k].indexOf(m[k]) < 0) m[k] = d[k];
+  if (['none', 'strap', 'cable', 'truss'].indexOf(m.rest.type) < 0) m.rest.type = 'none';
+  if (['floor', 'deck'].indexOf(m.rest.to) < 0) m.rest.to = 'floor';
+  if (['rear', 'front', 'both'].indexOf(m.rest.side) < 0) m.rest.side = 'rear';
+  if (['front', 'rear', 'both'].indexOf(m.knock.from) < 0) m.knock.from = 'both';
+  if (!M.CABINETS.some((c) => c.id === m.cab && c.size === m.cabSize)) { const c0 = M.CABINETS.find((c) => c.size === m.cabSize); m.cab = c0.id; m.kgm2 = c0.kgm2; m.cabDepth = c0.depth; }
+  for (const k of Object.keys(S)) delete S[k];
+  Object.assign(S, m);
+}
+let saveTimer = 0;
+function saveSoon() {                              // the wall is remembered in this browser; if storage is blocked it just is not
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ v: 1, S, tab: ui.tab, rtab: ui.rtab, speed: ui.speed })); } catch (e) { /* private window or blocked */ }
+  }, 300);
+}
+function loadSaved() {
+  try {
+    const o = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+    if (!o || o.v !== 1 || !o.S) return false;
+    setState(o.S);
+    if (['wall', 'stage', 'load', 'adv'].indexOf(o.tab) >= 0) ui.tab = o.tab;
+    if (['summary', 'draw', 'detail'].indexOf(o.rtab) >= 0) ui.rtab = o.rtab;
+    if ([1, 2, 4].indexOf(o.speed) >= 0) ui.speed = o.speed;
+    return true;
+  } catch (e) { return false; }
+}
+let undoSnap = null, toastTimer = 0;
+function hideToast() { $('toast').hidden = true; clearTimeout(toastTimer); }
+function toast(msg, canUndo) {
+  $('toastMsg').textContent = msg; $('toastUndo').hidden = !canUndo; $('toast').hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(hideToast, canUndo ? 12000 : 6000);
+}
+function undo() {
+  if (!undoSnap) return;
+  setState(undoSnap); undoSnap = null; hideToast();
+  ui.selected = -1; fillCabModels(); endSim(); sig = ''; update();
+}
+function newWall() {                               // a fresh wall; the last one can be brought back with Undo
+  undoSnap = clone(S); setState(null);
+  ui.selected = -1; fillCabModels(); endSim(); sig = ''; update();
+  selectSet('wall'); scrollRailTop();
+  toast('New wall: everything is back to the starting values.', true);
+}
+const EXAMPLE_NAMES = { sheet: 'Sheet wall', noballast: 'No ballast', draft: 'Strong draught', front: 'Front draught', door: 'Door gust', knock: 'Knock', wobble: 'Stage wobble', quake: 'Earthquake',
+  breeze: 'Outdoor breeze', gale: 'Outdoor gale', stage: 'On a stage', straps: 'Top straps' };
+function applyExample(name, quiet) {               // an example is a whole wall: it replaces every setting (Undo brings yours back)
+  if (!quiet) undoSnap = clone(S);
+  setState(null); ui.selected = -1; fillCabModels();
+  if (name === 'noballast') { S.ballastAuto = false; S.ballastPer = 0; S.ballast = null; }
+  if (name === 'draft') { S.indoorScale = 4; S.ballastAuto = false; S.ballastPer = 9.055; S.ballast = null; }
+  if (name === 'front') { S.indoorScale = 4; S.windDir = 180; }
+  const sheetBallast = () => { S.ballastAuto = false; S.ballastPer = 9.055; S.ballast = null; };
+  if (name === 'door') { S.indoorCase = 'door'; S.door = { v: 5.4, dur: 1.2 }; sheetBallast(); }
+  if (name === 'knock') { S.indoorCase = 'knock'; S.knock = { kgf: 60, h: 1.2, from: 'rear', dur: 0.3, share: 2 }; sheetBallast(); }
+  if (name === 'wobble') {
+    S.indoorCase = 'sway'; S.sway = { amp: 9, f: 2, bounce: 0.1 }; S.ballastAuto = false; S.ballastPer = 60; S.ballast = null;
+    S.stage.on = true; S.stage.h = 1.2; S.stage.depth = 6; S.stage.front = 4.6;
+  }
+  if (name === 'quake') { S.indoorCase = 'quake'; S.quake = { pga: 0.24, floor: 1, dur: 12 }; sheetBallast(); }
+  if (name === 'breeze') { S.mode = 'outdoor'; S.outSpeed = 8; S.gust = 0.3; }
+  if (name === 'gale') { S.mode = 'outdoor'; S.outSpeed = 14; S.gust = 0.4; S.ballastAuto = false; S.ballastPer = 300; S.ballast = null; }
+  if (name === 'stage') { S.mode = 'outdoor'; S.outSpeed = 8; S.gust = 0.3; S.stage.on = true; S.stage.h = 1.6; S.stage.depth = 6; S.stage.front = 4.6; }
+  if (name === 'straps') {
+    S.mode = 'outdoor'; S.outSpeed = 10; S.gust = 0.3; S.ballastAuto = false; S.ballastPer = 100; S.ballast = null;
+    S.stage.on = true; S.stage.h = 1.2; S.stage.depth = 6; S.stage.front = 4.6;
+    S.rest = Object.assign(S.rest, { type: 'strap', n: 0, a: 0, d: 0, to: 'floor', wll: 2000, anchorKg: 0, side: 'rear' });
+  }
+  endSim(); sig = ''; update();
+  if (!quiet) toast('Example loaded: ' + (EXAMPLE_NAMES[name] || name) + '. Your own wall is one tap away with Undo.', true);
+}
+const loadScenario = (name) => applyExample(name, true);      // kept for tests and for anyone driving the page by script
+
+/* ------------------------------------------------------------------ Start and End simulation */
+function currentLoadText() {
+  if (S.mode === 'outdoor') return 'Wind: Beaufort ' + M.beaufort(S.outSpeed) + ', ' + nf1(S.outSpeed) + ' m/s' + (S.gust > 0 ? ' with gusts' : '');
+  return M.CASE_NAME[S.indoorCase] + ': ' + loadSummary(S.indoorCase);
+}
+function syncRunUI() {
+  const idle = ui.run === 'idle', fin = ui.run === 'finished';
+  ui.paused = ui.run === 'paused';
+  $('btnStart').hidden = !idle; $('runCtl').hidden = idle; $('live').hidden = idle;               // nothing is moving yet, so there is nothing to read out
+  $('btnPause').hidden = fin; $('btnPause').setAttribute('aria-pressed', String(ui.paused));
+  $('btnPause').querySelector('use').setAttribute('href', ui.paused ? '#i-play' : '#i-pause');
+  $('btnPause').title = ui.paused ? 'Carry on' : 'Pause the simulation';
+  $('btnReplay').querySelector('span').textContent = fin ? 'Run again' : 'Restart';
+  const res = $('vsRes'), r = fin ? ui.result : null;                      // what the run came to, in the strip under the view (it never covers the wall)
+  res.hidden = !r;
+  if (r) {
+    res.dataset.s = r.kind;
+    res.querySelector('use').setAttribute('href', r.kind === 'held' ? '#i-check' : '#i-x');
+    setText('vsResK', r.kind === 'held' ? 'Held' : 'Toppled'); setText('vsResT', r.text);
+  }
+  $('btnStart3').querySelector('span').textContent = idle ? 'Start simulation' : 'Restart simulation';
+}
+function startSim() { sim.reset(); ui.run = 'running'; ui.result = null; syncRunUI(); }
+function endSim() { sim.reset(); ui.run = 'idle'; ui.result = null; syncRunUI(); }
+function pauseSim() { if (ui.run === 'running') ui.run = 'paused'; else if (ui.run === 'paused') ui.run = 'running'; syncRunUI(); }
+function finishRun(r) { ui.result = r; ui.run = 'finished'; syncRunUI(); }
+function checkFinish() {                           // a toppled wall ends the run; so does a one-off load (gust, knock, earthquake) once the wall has settled
+  if (ui.run !== 'running' || ui.result) return;
+  if (sim.toppled && sim.phi > 1.2) { finishRun({ kind: 'toppled', text: 'The wall toppled after ' + nf1(sim.toppledAt) + ' s.' }); return; }
+  const done = sim.doneAt;
+  if (done !== null && !sim.toppled && sim.t > done + 3.5) {
+    const lean = sim.maxPhi * 180 / Math.PI, lift = Math.sin(sim.maxPhi) * D.geom.depth * 1000;
+    const brief = D.status === 'tipping' ? ' It held only because the load was brief.' : '';          // the safety factor above treats the load as lasting
+    finishRun({ kind: 'held', text: (sim.maxPhi < 2e-4 ? 'It did not even lift.' : 'Leaned at most ' + nf(lean, lean < 10 ? 1 : 0) + '°, the base lifted ' + nf(lift, lift < 100 ? 1 : 0) + ' mm.') + brief });
+  }
+}
+
+/* ------------------------------------------------------------------ tabs, the Examples menu and keys */
+let selectSet = null, selectRes = null;
+function scrollRailTop() { const r = $('rail'); r.scrollTop = 0; if (window.matchMedia('(max-width: 899px)').matches) r.scrollIntoView({ block: 'start' }); }
+function initTabs(listId, onSelect) {
+  const list = $(listId), tabs = [].slice.call(list.querySelectorAll('[role="tab"]'));
+  const select = (name, focus) => {
+    let ok = false;
+    for (const t of tabs) {
+      const on = t.dataset.tab === name; if (on) ok = true;
+      t.setAttribute('aria-selected', String(on)); t.tabIndex = on ? 0 : -1; $(t.getAttribute('aria-controls')).hidden = !on;
+      if (on && focus) t.focus();
+    }
+    if (ok && onSelect) onSelect(name);
+  };
+  tabs.forEach((t) => t.addEventListener('click', () => select(t.dataset.tab)));
+  list.addEventListener('keydown', (e) => {
+    const i = tabs.indexOf(document.activeElement); if (i < 0) return;
+    const j = e.key === 'ArrowRight' ? (i + 1) % tabs.length : e.key === 'ArrowLeft' ? (i + tabs.length - 1) % tabs.length : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : -1;
+    if (j >= 0) { e.preventDefault(); select(tabs[j].dataset.tab, true); }
+  });
+  return select;
+}
+function initMenu() {
+  const btn = $('btnEx'), pop = $('exMenu'), items = () => [].slice.call(pop.querySelectorAll('[role="menuitem"]'));
+  const open = (on) => { pop.hidden = !on; btn.setAttribute('aria-expanded', String(on)); if (on) items()[0].focus(); };
+  btn.addEventListener('click', () => open(pop.hidden));
+  btn.addEventListener('keydown', (e) => { if (e.key === 'ArrowDown') { e.preventDefault(); open(true); } });
+  document.addEventListener('click', (e) => { if (!pop.hidden && !e.target.closest('#exWrap')) open(false); });
+  pop.addEventListener('click', (e) => { const b = e.target.closest('[data-ex]'); if (!b) return; open(false); btn.focus(); applyExample(b.dataset.ex); });
+  pop.addEventListener('keydown', (e) => {
+    const it = items(), i = it.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.preventDefault(); open(false); btn.focus(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); it[(i + 1) % it.length].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); it[(i + it.length - 1) % it.length].focus(); }
+  });
+}
+function initKeys() {                              // Space starts or pauses, Escape ends; not while you are typing or on a control that uses those keys
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && undoSnap && !e.target.closest('input,textarea,select')) { e.preventDefault(); undo(); } return; }
+    if (e.target.closest('input,textarea,select,button,a,summary,[role="tab"],[role="menuitem"]')) return;
+    if (e.key === ' ') { e.preventDefault(); if (ui.run === 'idle') startSim(); else if (ui.run === 'finished') startSim(); else pauseSim(); }
+    else if (e.key === 'Escape' && ui.run !== 'idle') endSim();
+  });
 }
 
 /* ------------------------------------------------------------------ controls */
@@ -3116,8 +3440,10 @@ function fillCabModels() {
 function initControls() {
   fillCabModels();
   segs.cab = bindSeg('segCab', (v) => {
+    const h0 = S.H;
     S.cabSize = v; const first = M.CABINETS.find((c) => c.size === v);
     S.cab = first.id; S.kgm2 = first.kgm2; S.cabDepth = first.depth; fillCabModels(); update();
+    if (Math.abs(S.H - h0) > 1e-9) toast('The height is now ' + nf(S.H, S.H % 1 ? 1 : 0) + ' m: these cabinets stack in ' + Math.round(M.cabHeight(v) * 1000) + ' mm steps.', false);
   });
   $('cabModel').addEventListener('change', () => {
     const c = M.CABINETS.find((x) => x.id === $('cabModel').value); if (!c) return;
@@ -3194,15 +3520,28 @@ function initControls() {
   $('cmpRows').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickRow(e); } });
   segs.bal = bindSeg('segBal', (v) => { if (v === 'auto') S.ballastAuto = true; else ensureManual(); update(); });
   segs.pos = bindSeg('segPos', (v) => { S.ballastPos = v; update(); });
-  segs.speed = bindSeg('segSpeed', (v) => { ui.speed = +v; segs.speed.set(v); });
+  segs.speed = bindSeg('segSpeed', (v) => { ui.speed = +v; segs.speed.set(v); $('btnSpeed').textContent = v + '×'; saveSoon(); });
+  $('btnSpeed').addEventListener('click', () => { ui.speed = ui.speed === 1 ? 2 : ui.speed === 2 ? 4 : 1; segs.speed.set(ui.speed); $('btnSpeed').textContent = ui.speed + '×'; saveSoon(); });
   segs.cam = bindSeg('segCam', (v) => { ui.cam = v; ui.camTAz = CAM_PRESETS[v].az; ui.camTEl = CAM_PRESETS[v].el; segs.cam.set(v); });
   segs.exag = bindSeg('segExag', (v) => { ui.exag = v; segs.exag.set(v); update(); });
   $('btnAutoN').addEventListener('click', () => { S.autoN = !S.autoN; update(); });
   document.querySelectorAll('[data-dir]').forEach((b) => b.addEventListener('click', () => { S.windDir = +b.dataset.dir; update(); }));
-  document.querySelectorAll('[data-scn]').forEach((b) => b.addEventListener('click', () => loadScenario(b.dataset.scn)));
-  $('btnReset').addEventListener('click', () => loadScenario('sheet'));
-  $('btnReplay').addEventListener('click', () => { sim.reset(); ui.paused = false; syncPause(); });
-  $('btnPause').addEventListener('click', () => { ui.paused = !ui.paused; syncPause(); });
+  selectSet = initTabs('setTabs', (n) => { ui.tab = n; saveSoon(); });
+  selectRes = initTabs('resTabs', (n) => { ui.rtab = n; dirty.rear = dirty.map = dirty.bend = true; saveSoon(); });
+  document.querySelectorAll('[data-goto]').forEach((b) => b.addEventListener('click', () => { selectSet(b.dataset.goto); scrollRailTop(); }));
+  document.querySelectorAll('[data-sf]').forEach((b) => b.addEventListener('click', () => { S.SF = +b.dataset.sf; update(); }));
+  $('btnNew').addEventListener('click', newWall);
+  for (const id of ['btnStart', 'btnStart3', 'btnReplay']) $(id).addEventListener('click', startSim);
+  $('btnEnd').addEventListener('click', endSim);
+  $('btnPause').addEventListener('click', pauseSim);
+  $('toastUndo').addEventListener('click', undo); $('toastX').addEventListener('click', hideToast);
+  $('vsChange').addEventListener('click', () => { selectSet('load', true); scrollRailTop(); });
+  $('btnUseNeed').addEventListener('click', () => { setBallastAll(Math.ceil(D.req.per * 10) / 10); update(); });
+  $('btnReset').addEventListener('click', () => {                                  // only the advanced values: the wall is left alone
+    const d = M.defaults();
+    S.EI = d.EI; S.gaRatio = d.gaRatio; S.defLimit = d.defLimit; S.Cf = d.Cf; S.depth = d.depth; S.mu = d.mu; S.stage.muDeck = d.stage.muDeck; S.frame = Object.assign({}, d.frame);
+    update(); toast('Advanced values are back to the sheet’s.', false);
+  });
   $('btnInset').addEventListener('click', () => { ui.showInset = !ui.showInset; $('btnInset').setAttribute('aria-pressed', String(ui.showInset)); });
   $('selClear').addEventListener('click', () => { ui.selected = -1; update(); });
   const step = (kg) => (kg < 20 ? 0.5 : kg < 100 ? 2 : kg < 500 ? 10 : 50);
@@ -3213,16 +3552,12 @@ function initControls() {
   $('selAll').addEventListener('click', () => { if (ui.selected >= 0) { setBallastAll(D.ballast[ui.selected]); update(); } });
   document.querySelectorAll('details.tv').forEach((d) => d.addEventListener('toggle', () => { if (d.open) renderTables(); }));
 }
-function syncPause() {
-  $('btnPause').setAttribute('aria-pressed', String(ui.paused));
-  $('btnPause').querySelector('use').setAttribute('href', ui.paused ? '#i-play' : '#i-pause');
-}
 function syncControls() {
   const cabH = M.cabHeight(S.cabSize);
   $('H-r').step = cabH; $('H-n').step = cabH;
   for (const k in pairs) pairs[k].sync();
   $('SC-r').value = S.indoorScale; $('SC-r').style.setProperty('--p', (S.indoorScale / 10 * 100) + '%');
-  segs.mode.set(S.mode); segs.bal.set(S.ballastAuto ? 'auto' : 'manual'); segs.pos.set(S.ballastPos); segs.speed.set(ui.speed);
+  segs.mode.set(S.mode); segs.bal.set(S.ballastAuto ? 'auto' : 'manual'); segs.pos.set(S.ballastPos); segs.speed.set(ui.speed); $('btnSpeed').textContent = ui.speed + '×';
   segs.cab.set(S.cabSize); if ($('cabModel').value !== S.cab) $('cabModel').value = S.cab;
   segs.stage.set(S.stage.on ? 'on' : 'off'); segs.rest.set(S.rest.type); segs.rto.set(S.rest.to); segs.rside.set(S.rest.side); segs.prof.set(S.profile);
   segs.cam.set(ui.cam); segs.exag.set(ui.exag);
@@ -3243,34 +3578,6 @@ function syncControls() {
   const sel = ui.selected >= 0;
   $('selBox').hidden = !sel;
   if (sel) { $('selName').textContent = 'Base ' + (ui.selected + 1) + ' of ' + D.N; if (document.activeElement !== $('selVal')) $('selVal').value = fmtB(D.ballast[ui.selected]); }
-}
-
-function loadScenario(name) {
-  const keepSpeed = ui.speed;
-  const d = M.defaults();
-  for (const k in d) S[k] = d[k];
-  S.frame = Object.assign({}, d.frame); S.stage = Object.assign({}, d.stage); S.rest = Object.assign({}, d.rest);
-  ui.selected = -1; ui.speed = keepSpeed; fillCabModels();
-  if (name === 'noballast') { S.ballastAuto = false; S.ballastPer = 0; S.ballast = null; }
-  if (name === 'draft') { S.indoorScale = 4; S.ballastAuto = false; S.ballastPer = 9.055; S.ballast = null; }
-  if (name === 'front') { S.indoorScale = 4; S.windDir = 180; }
-  const sheetBallast = () => { S.ballastAuto = false; S.ballastPer = 9.055; S.ballast = null; };
-  if (name === 'door') { S.indoorCase = 'door'; S.door = { v: 5.4, dur: 1.2 }; sheetBallast(); }
-  if (name === 'knock') { S.indoorCase = 'knock'; S.knock = { kgf: 60, h: 1.2, from: 'rear', dur: 0.3, share: 2 }; sheetBallast(); }
-  if (name === 'wobble') {
-    S.indoorCase = 'sway'; S.sway = { amp: 9, f: 2, bounce: 0.1 }; S.ballastAuto = false; S.ballastPer = 60; S.ballast = null;
-    S.stage.on = true; S.stage.h = 1.2; S.stage.depth = 6; S.stage.front = 4.6;
-  }
-  if (name === 'quake') { S.indoorCase = 'quake'; S.quake = { pga: 0.24, floor: 1, dur: 12 }; sheetBallast(); }
-  if (name === 'breeze') { S.mode = 'outdoor'; S.outSpeed = 8; S.gust = 0.3; }
-  if (name === 'gale') { S.mode = 'outdoor'; S.outSpeed = 14; S.gust = 0.4; S.ballastAuto = false; S.ballastPer = 300; S.ballast = null; }
-  if (name === 'stage') { S.mode = 'outdoor'; S.outSpeed = 8; S.gust = 0.3; S.stage.on = true; S.stage.h = 1.6; S.stage.depth = 6; S.stage.front = 4.6; }
-  if (name === 'straps') {
-    S.mode = 'outdoor'; S.outSpeed = 10; S.gust = 0.3; S.ballastAuto = false; S.ballastPer = 100; S.ballast = null;
-    S.stage.on = true; S.stage.h = 1.2; S.stage.depth = 6; S.stage.front = 4.6;
-    S.rest = Object.assign(S.rest, { type: 'strap', n: 0, a: 0, d: 0, to: 'floor', wll: 2000, anchorKg: 0, side: 'rear' });
-  }
-  sig = ''; update(); sim.reset(); ui.paused = false; syncPause();
 }
 
 /* ------------------------------------------------------------------ text */
@@ -3302,7 +3609,9 @@ function renderText() {
   setHint('H-h', D.rows + ' rows of ' + (D.cabH * 1000) + ' mm · ' + (D.cols * D.rows) + ' cabinets in all');
   setHint('K-h', nf1(cabKg()) + ' kg per ' + cabLabel + ' cabinet · the screen weighs ' + nf0(D.Ws) + ' kg');
   setHint('N-h', D.spacingOK ? 'One base every ' + nf2(D.spacing) + ' m. Sheet rule: ' + D.sheetN + ' for this width.' : 'One base every ' + nf2(D.spacing) + ' m. The sheet wants at most 1 m, so ' + D.sheetN + ' bases.', D.spacingOK ? '' : 'warn');
-  setHint('B-h', S.ballastAuto ? 'Solves for ' + (sp || stg ? 'the smallest ballast that works with your ' + [stg ? 'stage' : '', sp ? 'straps' : ''].filter(Boolean).join(' and ') : 'the sheet result') + ': ' + nf2(D.req.per) + ' kg per base' + (D.req.capped ? ' (capped, not enough)' : '') + '. Move the slider to take over.' : nf1(D.Wb) + ' kg on ' + D.N + ' bases' + (D.req.none ? '. Nothing is needed here.' : '. Needed: ' + nf2(D.req.per) + ' kg per base.'));
+  setHint('B-h', S.ballastAuto ? 'Worked out for you: ' + (D.req.none ? 'nothing is needed' : nf2(D.req.per) + ' kg per base is the least that gives your ' + nf2(S.SF) + '× margin') + (D.req.capped ? ' (more than the solver allows, so ballast alone cannot do it)' : '') + '. Drag the slider or type a weight to enter your own.'
+    : nf1(D.Wb) + ' kg in total on ' + D.N + ' bases, ' + nf1(avg) + ' each. ' + (D.req.none ? 'Nothing is needed here.' : D.req.capped ? 'Ballast alone cannot reach your margin here.' : 'Needed: ' + nf2(D.req.per) + ' kg per base.'));
+  const needBtn = $('btnUseNeed'); needBtn.hidden = S.ballastAuto || D.req.none || D.req.capped || Math.abs(D.req.per - avg) < 0.05; needBtn.textContent = 'Use ' + nf1(Math.ceil(D.req.per * 10) / 10) + ' kg per base';
   setText('posNote', 'arm ' + nf(g.aB, 3) + ' m from the toe');
   setText('modeHint', outdoor ? 'Open-air wind with gusts. The sheet is written for indoor use, so treat this as a rough guide.' : 'Draught from air conditioning, fans and doors. Uses the wind scale from the sheet, which is the Beaufort scale.');
   const row = M.SCALE[S.indoorScale];
@@ -3382,7 +3691,7 @@ function renderText() {
   $('tTip').firstChild.textContent = lv.infin ? '∞' : lv.crit; $('tTip').querySelector('small').textContent = lv.infin ? '' : lv.unit;
   setText('tTipS', lv.infin ? lv.none : lv.critS);
 
-  renderBend(); renderMoments(); renderChecks(); renderSheet(); renderTables(); renderIndoor();
+  renderBend(); renderMoments(); renderChecks(); renderSheet(); renderTables(); renderIndoor(); renderStrip(avg);
   setText('planInfo', isWind ? nf0(w.cn * 100) + '% pushes the screen · ' + nf0(Math.abs(w.sinT) * 100) + '% slides along it'
     : kindL === 'force' ? (S.knock.from === 'both' ? 'the push is checked from the front and from the rear' : 'push from the ' + S.knock.from)
     : 'the floor moves front to back; the wall tips whichever way is weaker');
@@ -3396,7 +3705,7 @@ function renderText() {
   $('frontLegend').textContent = '';
   const lg = (txtv, col) => { const s2 = el('span'); const i = el('i'); i.style.background = col; s2.appendChild(i); s2.append(txtv); $('frontLegend').appendChild(s2); };
   lg('LED face', 'var(--c-screen)'); if (stg) lg('Stage', '#8a97a8'); if (sp) lg(RT[sp.type], '#ffb020'); lg(isWind ? 'Wind' : kindL === 'force' ? 'Push' : 'Shaking', '#d6409f');
-  setText('legForce', isWind ? 'Wind force' : kindL === 'force' ? 'Push' : 'Inertia force');
+  setText('legForce', isWind ? 'Wind force' : kindL === 'force' ? 'Push' : 'Shaking force');
 }
 
 /* ------------------------------------------------------------------ indoor loads: wording, limits, comparison */
@@ -3515,6 +3824,17 @@ function renderIndoor() {
   setText('cmpHint', 'Click a row to play that load. “Needs” is the ballast per base for ' + nf2(S.SF) + '× on its own, with the ballast where it works best. The ' + (most.none ? 'weight alone covers every case.' : most.name.toLowerCase() + ' asks for the most.'));
 }
 
+function renderStrip(avg) {                         // the verdict strip under the side view: always on screen
+  const vs = $('vstrip'), status = D.status;
+  vs.dataset.s = status;
+  $('vsIcon').querySelector('use').setAttribute('href', '#' + (status === 'stable' ? 'i-check' : status === 'marginal' ? 'i-warn' : 'i-x'));
+  setText('vsLabel', status === 'stable' ? 'Stable' : status === 'marginal' ? 'Marginal' : 'Will tip over');
+  setText('vsSF', sfTxt(D.SFact) + '×'); setText('vsReq', nf2(S.SF) + '×');
+  setText('vsNeed', D.req.none ? '0' : D.req.capped ? '> ' + nf0(M.MAX_BALLAST) : nf(D.req.per)); setText('vsHave', nf(avg));
+  setText('vsAuto', S.ballastAuto ? 'worked out' : 'you entered');
+  setText('vsLoad', currentLoadText());
+}
+
 function renderBend() {
   const b = D.bend, sp = D.strap, L = b.L, topAbs = Math.abs(b.topEl);
   const topMm = topAbs * 1000, ratio = topAbs > 1e-9 ? L / topAbs : Infinity;
@@ -3564,11 +3884,11 @@ function renderChecks() {
     const li = el('li', cls); li.appendChild(icon(ICON[cls])); const d = el('div'); const bb = el('span'); bb.textContent = html; d.appendChild(bb);
     if (small) { d.appendChild(document.createElement('br')); d.appendChild(el('small', null, small)); } li.appendChild(d); ul.appendChild(li);
   };
-  if (D.loadCase === 'draught' || D.loadCase === 'outdoor') add(w.bft < 7 ? 'ok' : 'wn', w.bft < 7 ? 'Beaufort ' + w.bft + '. Within the sheet limit (below 7).' : 'Beaufort ' + w.bft + ' is above the sheet limit (below 7). Treat the result as a rough guide only.', 'Statement 1');
+  if (D.loadCase === 'draught' || D.loadCase === 'outdoor') add(w.bft < 7 ? 'ok' : 'wn', w.bft < 7 ? 'Beaufort ' + w.bft + '. Within the sheet limit (below 7).' : 'Beaufort ' + w.bft + ' is above the sheet limit (below 7). Treat the result as a rough guide only.');
   const rows = []; for (let r = 2; r <= D.rows; r += 2) rows.push(r); if (D.rows % 2 === 1) rows.push(D.rows);
-  add('in', 'Tie each back frame to the screen at rows ' + rows.join(', ') + ' (every 2nd row, topmost included).', 'Statement 2 · the cyan connectors in the drawing' + (D.cabH === 0.5 ? ' · with 500 mm cabinets that is every 1 m' : ''));
-  add(D.spacingOK ? 'ok' : 'wn', D.spacingOK ? 'Bases are ' + nf2(D.spacing) + ' m apart (at most 1 m, first and last column included).' : 'Bases are ' + nf2(D.spacing) + ' m apart. The sheet asks for a connection at least every 1 m, which means ' + D.sheetN + ' bases.', 'Statement 3');
-  if (isWindK) add('in', D.dir === 'rear' ? 'Rear wind is the critical case. Keep the ballast at the rear end of each base, ' + nf(D.geom.aB, 3) + ' m behind the toe.' : 'Front wind: the screen’s own weight works with you (arm ' + nf(D.geom.aS, 3) + ' m). The sheet puts the ballast mid-base for this direction.', 'Statement 5');
+  add('in', 'Tie each back frame to the screen at rows ' + rows.join(', ') + ' (every 2nd row, topmost included).', 'the cyan connectors in the drawing' + (D.cabH === 0.5 ? ' · with 500 mm cabinets that is every 1 m' : ''));
+  add(D.spacingOK ? 'ok' : 'wn', D.spacingOK ? 'Bases are ' + nf2(D.spacing) + ' m apart (at most 1 m, first and last column included).' : 'Bases are ' + nf2(D.spacing) + ' m apart. The sheet asks for a connection at least every 1 m, which means ' + D.sheetN + ' bases.', '');
+  if (isWindK) add('in', D.dir === 'rear' ? 'Rear wind is the critical case. Keep the ballast at the rear end of each base, ' + nf(D.geom.aB, 3) + ' m behind the toe.' : 'Front wind: the screen’s own weight works with you (arm ' + nf(D.geom.aS, 3) + ' m). The sheet puts the ballast mid-base for this direction.', '');
   else {
     if (D.both) {
       const f = D.sides.fwd.SFact, bk = D.sides.back.SFact, lvl = (v) => (v >= S.SF - 1e-9 ? 'ok' : v >= 1 - 1e-9 ? 'wn' : 'bd');
@@ -3581,7 +3901,7 @@ function renderChecks() {
     }
     if (D.strap && (D.loadCase === 'knock' || D.loadCase === 'sway' || D.loadCase === 'quake')) add('wn', 'A sudden load can double the pull on a strap or cable. The static figures here do not show that.', 'Keep the strap rating well above the pull shown');
   }
-  if (D.req.none && !sp && !stg) add('ok', 'Required ballast is negative (' + nf1(D.req.totalRaw) + ' kg), so no extra ballast is needed.', 'Statement 6');
+  if (D.req.none && !sp && !stg) add('ok', 'Required ballast is negative (' + nf1(D.req.totalRaw) + ' kg), so no extra ballast is needed.', '');
 
   if (stg) {
     const lw = D.lam.lamW, ls = D.lam.lamS;
@@ -3614,7 +3934,7 @@ function renderChecks() {
   if (D.req.per > 100) add('wn', 'It needs ' + nf0(D.req.per) + ' kg on every base. That is a lot for a base plate. More bases, a deeper base, straps or anchoring would help.');
   const lo = Math.min(...D.local), lowI = D.local.indexOf(lo);
   if (lo < S.SF - 1e-9 && D.status === 'stable') add('wn', 'Uneven ballast: base ' + (lowI + 1) + ' only holds ' + nf2(lo) + '× its share of the wind. The screen has to carry load between bases.');
-  add('in', 'A rough reference only. It cannot replace a structural simulation or a practical test.', 'Statement 4');
+  add('in', 'A rough reference only. It cannot replace a structural simulation or a practical test.', '');
 }
 
 function renderSheet() {
@@ -3664,13 +3984,16 @@ function renderTables() {
 
 /* ------------------------------------------------------------------ live HUD */
 let hudKey = '';
-function hudCells() {                          // the two live readouts at the top of the side view, for the load in play
+function hudCells() {
+  const c = hudCells0(); if (ui.run === 'idle') { c[1] = '–'; c[3] = '–'; } return c;
+}
+function hudCells0() {                          // the two live readouts at the top of the side view, for the load in play
   const L = sim.lam, kind = D.loadKind, cs = D.loadCase;
   if (kind === 'wind') { const vNow = D.wind.vPeak * sim.lastU; return [cs === 'door' ? 'Gust now' : 'Wind now', nf1(vNow) + ' m/s · Bft ' + M.beaufort(vNow), 'Force', nf0(D.F.kgf * sim.lastU * sim.lastU) + ' kgf']; }
   if (kind === 'force') return ['Pushed from', Math.abs(L) < 0.02 ? '–' : 'the ' + (D.shake ? (L > 0 ? 'rear' : 'front') : D.dir), 'Push', nf0(S.knock.kgf * Math.abs(L)) + ' kgf'];
   const aNow = L * D.rig.acc / M.G;                                                                 // g at the wall's base, + tips it forward
   const c1 = cs === 'sway' ? ['Deck moves', nf1(S.sway.amp * sim.ground) + ' mm'] : cs === 'quake' ? ['Ground shakes', nf2(Math.abs(aNow) / S.quake.floor) + ' g'] : ['Load now', nf1(S.notional.pct * Math.abs(L)) + '%'];
-  return [c1[0], c1[1], 'Inertia force', nf0(D.F.kgf * Math.abs(L)) + ' kgf'];
+  return [c1[0], c1[1], 'Shaking force', nf0(D.F.kgf * Math.abs(L)) + ' kgf'];
 }
 function updateHud() {
   const u = sim.lastU, deg = sim.phi * 180 / Math.PI, hc = hudCells();
@@ -3724,7 +4047,11 @@ function initPointers() {
     deg = Math.round(deg / 5) * 5; for (const m of [0, 90, 180, 270]) if (Math.abs(deg - m) <= 4) deg = m;
     S.windDir = deg % 360; update();
   };
-  plan.addEventListener('pointerdown', (e) => { dragD = true; plan.classList.add('drag'); plan.setPointerCapture(e.pointerId); setDir(e); });
+  plan.addEventListener('pointerdown', (e) => {
+    if (D.loadKind !== 'wind') return;
+    if (e.pointerType !== 'mouse') { const hd = hits.handle, p = ptr(e, plan); if (!hd || Math.hypot(p.x - hd.x, p.y - hd.y) > 34) return; }
+    dragD = true; plan.classList.add('drag'); plan.setPointerCapture(e.pointerId); setDir(e);
+  });
   plan.addEventListener('pointermove', (e) => { if (dragD) setDir(e); });
   const endD = () => { dragD = false; plan.classList.remove('drag'); };
   plan.addEventListener('pointerup', endD); plan.addEventListener('pointercancel', endD);
@@ -3787,36 +4114,48 @@ function initPointers() {
 let last = performance.now(), acc = 0;
 const seenErr = {};
 function safe(name, fn) { try { fn(); } catch (e) { if (!seenErr[name]) { seenErr[name] = true; console.error(name + ' drawing failed:', e); } } }
+const shown = (id) => { const e = $(id); return !!(e && e.getClientRects().length); };
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (!ui.paused) {
+  if (ui.run === 'running') {
     acc += dt * ui.speed;
     let n = 0; while (acc >= SUB && n < 260) { sim.step(SUB); acc -= SUB; n++; }
     if (acc > SUB * 260) acc = 0;
     st.t += dt;
     if (st.V) advanceScene(dt, D.loadKind === 'wind' ? D.wind.vPeak * sim.lastU * D.wind.cn : 0, D.dir === 'rear' ? 1 : -1, st.V);
+    checkFinish();
   }
   ui.camAz += (ui.camTAz - ui.camAz) * 0.14; ui.camEl += (ui.camTEl - ui.camEl) * 0.14;
   safe('side', () => drawSide($('side'), st));
-  safe('front', () => drawFront($('front'), st));
-  safe('plan', () => drawPlan($('plan'), st, hits));
-  if (dirty.rear) { safe('rear', () => drawRear($('rear'), st, hits)); dirty.rear = false; }
-  if (dirty.map) { safe('map', () => drawMap($('map'), st, hits)); dirty.map = false; }
-  if (dirty.bend) { safe('bend', () => drawBend($('bendC'), st)); dirty.bend = false; }
+  if (shown('front')) safe('front', () => drawFront($('front'), st));                // a canvas in a hidden tab has no size, so it is skipped
+  if (shown('plan')) safe('plan', () => drawPlan($('plan'), st, hits));
+  if (dirty.rear && shown('rear')) { safe('rear', () => drawRear($('rear'), st, hits)); dirty.rear = false; }
+  if (dirty.map && shown('map')) { safe('map', () => drawMap($('map'), st, hits)); dirty.map = false; }
+  if (dirty.bend && shown('bendC')) { safe('bend', () => drawBend($('bendC'), st)); dirty.bend = false; }
   safe('hud', updateHud);
   requestAnimationFrame(frame);
 }
 
+function fitScrollPadding() {                       // on a phone the picture sticks to the top, so anything scrolled to must stop below it
+  const sb = document.querySelector('.stickbox'), root = document.documentElement;
+  const fit = () => { root.style.scrollPaddingTop = getComputedStyle(sb).position === 'sticky' ? Math.ceil(sb.getBoundingClientRect().height) + 8 + 'px' : ''; };
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(sb);
+  window.addEventListener('resize', fit); fit();
+}
 function init() {
-  initControls(); initPointers();
+  const restored = loadSaved();
+  initControls(); initPointers(); initMenu(); initKeys(); fitScrollPadding();
+  if (window.ResizeObserver) new ResizeObserver(() => { $('btnInset').hidden = $('side').clientWidth < 640; }).observe($('side'));      // the zoomed base detail needs the room
+  selectSet(ui.tab); selectRes(ui.rtab);
   update(); sim.reset();
+  if (restored && JSON.stringify(S) !== JSON.stringify(M.defaults())) toast('Your last wall is back. Press New wall to start again.', false);
   for (const id of ['rear', 'map', 'bendC']) new ResizeObserver(() => { dirty.rear = dirty.map = dirty.bend = true; }).observe($(id));
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { dirty.rear = dirty.map = dirty.bend = true; });
   const themeChanged = () => { resetTheme(); dirty.rear = dirty.map = dirty.bend = true; };
   try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', themeChanged); } catch (e) { /* older browsers */ }
   new MutationObserver(themeChanged).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] });
-  window.__led = { S, sim, ui, hits, st, get D() { return D; }, M, update, loadScenario,
-    redraw() { drawSide($('side'), st); drawFront($('front'), st); drawPlan($('plan'), st, hits); drawRear($('rear'), st, hits); drawMap($('map'), st, hits); drawBend($('bendC'), st); updateHud(); },
+  window.__led = { S, sim, ui, hits, st, get D() { return D; }, M, update, loadScenario, applyExample, newWall, undo, startSim, endSim, pauseSim, setState,
+    redraw() { drawSide($('side'), st); if (shown('front')) drawFront($('front'), st); if (shown('plan')) drawPlan($('plan'), st, hits); if (shown('rear')) drawRear($('rear'), st, hits); if (shown('map')) drawMap($('map'), st, hits); if (shown('bendC')) drawBend($('bendC'), st); updateHud(); },
     bench(n) { n = n || 30; const t0 = performance.now(); for (let i = 0; i < n; i++) { drawSide($('side'), st); drawFront($('front'), st); drawPlan($('plan'), st, hits); } const t1 = performance.now(); for (let i = 0; i < n; i++) { drawMap($('map'), st, hits); drawRear($('rear'), st, hits); drawBend($('bendC'), st); } const t2 = performance.now(); const t3 = performance.now(); for (let i = 0; i < n; i++) { M.derive(S); } const t4 = performance.now(); return { perFrameMs: (t1 - t0) / n, perDirtyMs: (t2 - t1) / n, deriveMs: (t4 - t3) / n }; } };
   requestAnimationFrame(frame);
 }

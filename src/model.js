@@ -595,25 +595,35 @@
       if (!this.side) this.side = this.dirSign;
     }
     reset() {
-      this.t = 0; this.phi = 0; this.omega = 0; this.toppled = false; this.maxPhi = 0; this.impactAt = -1; this.lastU = 0; this.lam = 0; this.lamB = 0; this.Ph = 0; this.broken = false;
+      this.t = 0; this.phi = 0; this.omega = 0; this.toppled = false; this.toppledAt = -1; this.maxPhi = 0; this.impactAt = -1; this.lastU = 0; this.lam = 0; this.lamB = 0; this.Ph = 0; this.broken = false;
       this.side = this.dirSign || 1;                       // +1 tilting forward about the front toe, -1 backward about the rear toe
       this.pushDir = this.dirSign || 1;
       this.ground = 0;                                     // how far the floor is displaced, -1..1 of its peak
     }
     ramp(t) { const x = clamp(t / 1.5, 0, 1); return x * x * (3 - 2 * x); }
     windU(t) { const m = 1 + this.gust * gustN(t * 0.9 + 3); return this.ramp(t) * m / (1 + this.gust); }
+    /* A door gust, a knock or an earthquake happens once, one second after the start; the wind, the draught, the code load and the sway go on
+       until the simulation is ended. doneAt is when the event is over (null for loads that go on). */
+    get doneAt() {
+      switch (this.caseId) {
+        case 'door': return 1 + this.door.dur;
+        case 'knock': return 1 + this.knock.dur;
+        case 'quake': return 1 + this.quake.dur;
+        default: return null;
+      }
+    }
     /* the load at time t: u (speed or load fraction), lam (load factor, signed when it can push either way), gs (weight factor), g (floor displacement) */
     loadAt(t) {
       switch (this.caseId) {
-        case 'door': { const u = pulseAt(t, 1, this.door.dur, 0.5, 0.7, 6); return { u, lam: u * u, gs: 1, g: 0 }; }
+        case 'door': { const u = pulseAt(t, 1, this.door.dur, 0.5, 0.7, Infinity); return { u, lam: u * u, gs: 1, g: 0 }; }
         case 'knock': {
-          const d = this.knock.dur, u = pulseAt(t, 1, d, 0.05, 0.1, 5), n = t < 1 ? 0 : Math.floor((t - 1) / (d + 5));
-          const sgn = this.knock.from === 'rear' ? 1 : this.knock.from === 'front' ? -1 : (n % 2 === 0 ? 1 : -1);
+          const u = pulseAt(t, 1, this.knock.dur, 0.05, 0.1, Infinity);
+          const sgn = this.knock.from === 'rear' ? 1 : this.knock.from === 'front' ? -1 : this.pushSign;      // "worst side": the weaker way
           return { u, lam: this.shake ? sgn * u : u, gs: 1, g: 0 };
         }
         case 'sway': { const r = smoothstep(t / 2), s = Math.sin(2 * Math.PI * this.sway.f * t) * r; return { u: s, lam: s, gs: 1 - this.sway.bounce * Math.abs(s), g: s }; }
         case 'quake': {
-          const tau = t < 1 ? -1 : (t - 1) % (this.quake.dur + 6);
+          const tau = t < 1 ? -1 : t - 1;
           if (tau < 0) return { u: 0, lam: 0, gs: 1, g: 0 };
           const a = recAt(this.recs.h.acc, tau), v = recAt(this.recs.v.acc, tau);
           return { u: a, lam: a, gs: 1 + 0.5 * this.quake.pga * this.quake.floor * v, g: -recAt(this.recs.h.disp, tau) };
@@ -656,7 +666,7 @@
         this.omega = this.omega > 0.25 ? -this.omega * 0.18 : 0;
       }
       if (this.phi > this.maxPhi) this.maxPhi = this.phi;
-      if (!this.toppled && this.phi > R.phiCrit && net > 0 && (!R.strap || this.broken || this.phi > 0.6)) this.toppled = true;
+      if (!this.toppled && this.phi > R.phiCrit && net > 0 && (!R.strap || this.broken || this.phi > 0.6)) { this.toppled = true; this.toppledAt = this.t; }
     }
     /* Shaking, or a push from either side. The wall rests flat, or rocks about the front toe (side +1) or the rear toe (side -1). Each toe has its
        own geometry. When it comes back to the floor the other toe lands, some energy is lost, and it goes on over to the other side if it still has the speed. */
@@ -698,7 +708,7 @@
         this.omega = this.omega > 0.25 ? -this.omega * 0.18 : 0;
       }
       if (this.phi > this.maxPhi) this.maxPhi = this.phi;
-      if (!this.toppled && this.phi > r.phiCrit && this.omega > 0 && (!r.strap || this.broken || this.phi > 0.6)) this.toppled = true;
+      if (!this.toppled && this.phi > r.phiCrit && this.omega > 0 && (!r.strap || this.broken || this.phi > 0.6)) { this.toppled = true; this.toppledAt = this.t; }
     }
     liftMM(depth) { return Math.sin(this.phi) * depth * 1000; }
   }

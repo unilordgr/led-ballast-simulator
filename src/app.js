@@ -2,7 +2,7 @@
 const $ = (id) => document.getElementById(id);
 const S = M.defaults();
 const sim = new M.Sim();
-const ui = { selected: -1, speed: 1, paused: false, showInset: true, dragTop: 0, exag: 'auto', cam: 'three', camAz: CAM_PRESETS.three.az, camEl: CAM_PRESETS.three.el, camTAz: CAM_PRESETS.three.az, camTEl: CAM_PRESETS.three.el };
+const ui = { selected: -1, speed: 1, paused: false, run: 'idle', result: null, tab: 'wall', rtab: 'summary', showInset: true, dragTop: 0, exag: 'auto', cam: 'three', camAz: CAM_PRESETS.three.az, camEl: CAM_PRESETS.three.el, camTAz: CAM_PRESETS.three.az, camTEl: CAM_PRESETS.three.el };
 const hits = { rear: null, plan: null, map: null, hoverV: null };
 const st = { S, sim, ui, D: null, V: null, t: 0 };
 const SUB = 1 / 240;
@@ -71,10 +71,15 @@ function update() {
   st.D = D;
   const s2 = physSig();
   sim.setRig(D, S);
-  if (s2 !== sig) { sig = s2; sim.reset(); }
+  if (s2 !== sig) {                                    // the wall or the load changed: the run starts over and the last result is forgotten
+    sig = s2; sim.reset(); ui.result = null;
+    if (ui.run === 'finished') ui.run = 'idle';
+  }
   syncControls();
   renderText();
+  syncRunUI();
   dirty.rear = dirty.map = dirty.bend = true;
+  saveSoon();
 }
 function ensureManual() {
   if (S.ballastAuto) { S.ballastAuto = false; S.ballast = D.ballast.slice(); S.ballastPer = D.Wb / D.N; }
@@ -86,6 +91,180 @@ function setBallastAll(kg) {
 function setBase(i, kg) {
   ensureManual(); S.ballast[i] = clamp(roundBallast(Math.max(0, kg)), 0, 5000);
   S.ballastPer = S.ballast.reduce((a, b) => a + b, 0) / S.N;
+}
+
+/* ------------------------------------------------------------------ the saved wall, undo, New wall and Examples */
+const STORE_KEY = 'ledwall.v1';
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const ENUMS = { mode: ['indoor', 'outdoor'], cabSize: ['500x500', '500x1000'], profile: ['uniform', 'open', 'suburban', 'urban'], ballastPos: ['auto', 'rear', 'mid'], indoorCase: M.CASES };
+function mergeInto(def, src) {                   // anything missing or of the wrong type in a saved wall comes from the defaults
+  const out = {};
+  for (const k of Object.keys(def)) {
+    const d = def[k], v = src && typeof src === 'object' ? src[k] : undefined;
+    if (k === 'ballast') out[k] = Array.isArray(v) && v.length && v.length <= 200 && v.every((x) => typeof x === 'number' && isFinite(x)) ? v.slice() : null;
+    else if (d !== null && typeof d === 'object') out[k] = mergeInto(d, v);
+    else if (typeof d === 'number') out[k] = typeof v === 'number' && isFinite(v) ? v : d;
+    else if (typeof d === 'string') out[k] = typeof v === 'string' ? v : d;
+    else if (typeof d === 'boolean') out[k] = typeof v === 'boolean' ? v : d;
+    else out[k] = d;
+  }
+  return out;
+}
+function setState(src) {                          // S is shared with the drawings, so it is changed in place
+  const d = M.defaults(), m = mergeInto(d, src);
+  for (const k in ENUMS) if (ENUMS[k].indexOf(m[k]) < 0) m[k] = d[k];
+  if (['none', 'strap', 'cable', 'truss'].indexOf(m.rest.type) < 0) m.rest.type = 'none';
+  if (['floor', 'deck'].indexOf(m.rest.to) < 0) m.rest.to = 'floor';
+  if (['rear', 'front', 'both'].indexOf(m.rest.side) < 0) m.rest.side = 'rear';
+  if (['front', 'rear', 'both'].indexOf(m.knock.from) < 0) m.knock.from = 'both';
+  if (!M.CABINETS.some((c) => c.id === m.cab && c.size === m.cabSize)) { const c0 = M.CABINETS.find((c) => c.size === m.cabSize); m.cab = c0.id; m.kgm2 = c0.kgm2; m.cabDepth = c0.depth; }
+  for (const k of Object.keys(S)) delete S[k];
+  Object.assign(S, m);
+}
+let saveTimer = 0;
+function saveSoon() {                              // the wall is remembered in this browser; if storage is blocked it just is not
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ v: 1, S, tab: ui.tab, rtab: ui.rtab, speed: ui.speed })); } catch (e) { /* private window or blocked */ }
+  }, 300);
+}
+function loadSaved() {
+  try {
+    const o = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+    if (!o || o.v !== 1 || !o.S) return false;
+    setState(o.S);
+    if (['wall', 'stage', 'load', 'adv'].indexOf(o.tab) >= 0) ui.tab = o.tab;
+    if (['summary', 'draw', 'detail'].indexOf(o.rtab) >= 0) ui.rtab = o.rtab;
+    if ([1, 2, 4].indexOf(o.speed) >= 0) ui.speed = o.speed;
+    return true;
+  } catch (e) { return false; }
+}
+let undoSnap = null, toastTimer = 0;
+function hideToast() { $('toast').hidden = true; clearTimeout(toastTimer); }
+function toast(msg, canUndo) {
+  $('toastMsg').textContent = msg; $('toastUndo').hidden = !canUndo; $('toast').hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(hideToast, canUndo ? 12000 : 6000);
+}
+function undo() {
+  if (!undoSnap) return;
+  setState(undoSnap); undoSnap = null; hideToast();
+  ui.selected = -1; fillCabModels(); endSim(); sig = ''; update();
+}
+function newWall() {                               // a fresh wall; the last one can be brought back with Undo
+  undoSnap = clone(S); setState(null);
+  ui.selected = -1; fillCabModels(); endSim(); sig = ''; update();
+  selectSet('wall'); scrollRailTop();
+  toast('New wall: everything is back to the starting values.', true);
+}
+const EXAMPLE_NAMES = { sheet: 'Sheet wall', noballast: 'No ballast', draft: 'Strong draught', front: 'Front draught', door: 'Door gust', knock: 'Knock', wobble: 'Stage wobble', quake: 'Earthquake',
+  breeze: 'Outdoor breeze', gale: 'Outdoor gale', stage: 'On a stage', straps: 'Top straps' };
+function applyExample(name, quiet) {               // an example is a whole wall: it replaces every setting (Undo brings yours back)
+  if (!quiet) undoSnap = clone(S);
+  setState(null); ui.selected = -1; fillCabModels();
+  if (name === 'noballast') { S.ballastAuto = false; S.ballastPer = 0; S.ballast = null; }
+  if (name === 'draft') { S.indoorScale = 4; S.ballastAuto = false; S.ballastPer = 9.055; S.ballast = null; }
+  if (name === 'front') { S.indoorScale = 4; S.windDir = 180; }
+  const sheetBallast = () => { S.ballastAuto = false; S.ballastPer = 9.055; S.ballast = null; };
+  if (name === 'door') { S.indoorCase = 'door'; S.door = { v: 5.4, dur: 1.2 }; sheetBallast(); }
+  if (name === 'knock') { S.indoorCase = 'knock'; S.knock = { kgf: 60, h: 1.2, from: 'rear', dur: 0.3, share: 2 }; sheetBallast(); }
+  if (name === 'wobble') {
+    S.indoorCase = 'sway'; S.sway = { amp: 9, f: 2, bounce: 0.1 }; S.ballastAuto = false; S.ballastPer = 60; S.ballast = null;
+    S.stage.on = true; S.stage.h = 1.2; S.stage.depth = 6; S.stage.front = 4.6;
+  }
+  if (name === 'quake') { S.indoorCase = 'quake'; S.quake = { pga: 0.24, floor: 1, dur: 12 }; sheetBallast(); }
+  if (name === 'breeze') { S.mode = 'outdoor'; S.outSpeed = 8; S.gust = 0.3; }
+  if (name === 'gale') { S.mode = 'outdoor'; S.outSpeed = 14; S.gust = 0.4; S.ballastAuto = false; S.ballastPer = 300; S.ballast = null; }
+  if (name === 'stage') { S.mode = 'outdoor'; S.outSpeed = 8; S.gust = 0.3; S.stage.on = true; S.stage.h = 1.6; S.stage.depth = 6; S.stage.front = 4.6; }
+  if (name === 'straps') {
+    S.mode = 'outdoor'; S.outSpeed = 10; S.gust = 0.3; S.ballastAuto = false; S.ballastPer = 100; S.ballast = null;
+    S.stage.on = true; S.stage.h = 1.2; S.stage.depth = 6; S.stage.front = 4.6;
+    S.rest = Object.assign(S.rest, { type: 'strap', n: 0, a: 0, d: 0, to: 'floor', wll: 2000, anchorKg: 0, side: 'rear' });
+  }
+  endSim(); sig = ''; update();
+  if (!quiet) toast('Example loaded: ' + (EXAMPLE_NAMES[name] || name) + '. Your own wall is one tap away with Undo.', true);
+}
+const loadScenario = (name) => applyExample(name, true);      // kept for tests and for anyone driving the page by script
+
+/* ------------------------------------------------------------------ Start and End simulation */
+function currentLoadText() {
+  if (S.mode === 'outdoor') return 'Wind: Beaufort ' + M.beaufort(S.outSpeed) + ', ' + nf1(S.outSpeed) + ' m/s' + (S.gust > 0 ? ' with gusts' : '');
+  return M.CASE_NAME[S.indoorCase] + ': ' + loadSummary(S.indoorCase);
+}
+function syncRunUI() {
+  const idle = ui.run === 'idle', fin = ui.run === 'finished';
+  ui.paused = ui.run === 'paused';
+  $('btnStart').hidden = !idle; $('runCtl').hidden = idle; $('live').hidden = idle;               // nothing is moving yet, so there is nothing to read out
+  $('btnPause').hidden = fin; $('btnPause').setAttribute('aria-pressed', String(ui.paused));
+  $('btnPause').querySelector('use').setAttribute('href', ui.paused ? '#i-play' : '#i-pause');
+  $('btnPause').title = ui.paused ? 'Carry on' : 'Pause the simulation';
+  $('btnReplay').querySelector('span').textContent = fin ? 'Run again' : 'Restart';
+  const res = $('vsRes'), r = fin ? ui.result : null;                      // what the run came to, in the strip under the view (it never covers the wall)
+  res.hidden = !r;
+  if (r) {
+    res.dataset.s = r.kind;
+    res.querySelector('use').setAttribute('href', r.kind === 'held' ? '#i-check' : '#i-x');
+    setText('vsResK', r.kind === 'held' ? 'Held' : 'Toppled'); setText('vsResT', r.text);
+  }
+  $('btnStart3').querySelector('span').textContent = idle ? 'Start simulation' : 'Restart simulation';
+}
+function startSim() { sim.reset(); ui.run = 'running'; ui.result = null; syncRunUI(); }
+function endSim() { sim.reset(); ui.run = 'idle'; ui.result = null; syncRunUI(); }
+function pauseSim() { if (ui.run === 'running') ui.run = 'paused'; else if (ui.run === 'paused') ui.run = 'running'; syncRunUI(); }
+function finishRun(r) { ui.result = r; ui.run = 'finished'; syncRunUI(); }
+function checkFinish() {                           // a toppled wall ends the run; so does a one-off load (gust, knock, earthquake) once the wall has settled
+  if (ui.run !== 'running' || ui.result) return;
+  if (sim.toppled && sim.phi > 1.2) { finishRun({ kind: 'toppled', text: 'The wall toppled after ' + nf1(sim.toppledAt) + ' s.' }); return; }
+  const done = sim.doneAt;
+  if (done !== null && !sim.toppled && sim.t > done + 3.5) {
+    const lean = sim.maxPhi * 180 / Math.PI, lift = Math.sin(sim.maxPhi) * D.geom.depth * 1000;
+    const brief = D.status === 'tipping' ? ' It held only because the load was brief.' : '';          // the safety factor above treats the load as lasting
+    finishRun({ kind: 'held', text: (sim.maxPhi < 2e-4 ? 'It did not even lift.' : 'Leaned at most ' + nf(lean, lean < 10 ? 1 : 0) + '°, the base lifted ' + nf(lift, lift < 100 ? 1 : 0) + ' mm.') + brief });
+  }
+}
+
+/* ------------------------------------------------------------------ tabs, the Examples menu and keys */
+let selectSet = null, selectRes = null;
+function scrollRailTop() { const r = $('rail'); r.scrollTop = 0; if (window.matchMedia('(max-width: 899px)').matches) r.scrollIntoView({ block: 'start' }); }
+function initTabs(listId, onSelect) {
+  const list = $(listId), tabs = [].slice.call(list.querySelectorAll('[role="tab"]'));
+  const select = (name, focus) => {
+    let ok = false;
+    for (const t of tabs) {
+      const on = t.dataset.tab === name; if (on) ok = true;
+      t.setAttribute('aria-selected', String(on)); t.tabIndex = on ? 0 : -1; $(t.getAttribute('aria-controls')).hidden = !on;
+      if (on && focus) t.focus();
+    }
+    if (ok && onSelect) onSelect(name);
+  };
+  tabs.forEach((t) => t.addEventListener('click', () => select(t.dataset.tab)));
+  list.addEventListener('keydown', (e) => {
+    const i = tabs.indexOf(document.activeElement); if (i < 0) return;
+    const j = e.key === 'ArrowRight' ? (i + 1) % tabs.length : e.key === 'ArrowLeft' ? (i + tabs.length - 1) % tabs.length : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : -1;
+    if (j >= 0) { e.preventDefault(); select(tabs[j].dataset.tab, true); }
+  });
+  return select;
+}
+function initMenu() {
+  const btn = $('btnEx'), pop = $('exMenu'), items = () => [].slice.call(pop.querySelectorAll('[role="menuitem"]'));
+  const open = (on) => { pop.hidden = !on; btn.setAttribute('aria-expanded', String(on)); if (on) items()[0].focus(); };
+  btn.addEventListener('click', () => open(pop.hidden));
+  btn.addEventListener('keydown', (e) => { if (e.key === 'ArrowDown') { e.preventDefault(); open(true); } });
+  document.addEventListener('click', (e) => { if (!pop.hidden && !e.target.closest('#exWrap')) open(false); });
+  pop.addEventListener('click', (e) => { const b = e.target.closest('[data-ex]'); if (!b) return; open(false); btn.focus(); applyExample(b.dataset.ex); });
+  pop.addEventListener('keydown', (e) => {
+    const it = items(), i = it.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.preventDefault(); open(false); btn.focus(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); it[(i + 1) % it.length].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); it[(i + it.length - 1) % it.length].focus(); }
+  });
+}
+function initKeys() {                              // Space starts or pauses, Escape ends; not while you are typing or on a control that uses those keys
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && undoSnap && !e.target.closest('input,textarea,select')) { e.preventDefault(); undo(); } return; }
+    if (e.target.closest('input,textarea,select,button,a,summary,[role="tab"],[role="menuitem"]')) return;
+    if (e.key === ' ') { e.preventDefault(); if (ui.run === 'idle') startSim(); else if (ui.run === 'finished') startSim(); else pauseSim(); }
+    else if (e.key === 'Escape' && ui.run !== 'idle') endSim();
+  });
 }
 
 /* ------------------------------------------------------------------ controls */
@@ -125,8 +304,10 @@ function fillCabModels() {
 function initControls() {
   fillCabModels();
   segs.cab = bindSeg('segCab', (v) => {
+    const h0 = S.H;
     S.cabSize = v; const first = M.CABINETS.find((c) => c.size === v);
     S.cab = first.id; S.kgm2 = first.kgm2; S.cabDepth = first.depth; fillCabModels(); update();
+    if (Math.abs(S.H - h0) > 1e-9) toast('The height is now ' + nf(S.H, S.H % 1 ? 1 : 0) + ' m: these cabinets stack in ' + Math.round(M.cabHeight(v) * 1000) + ' mm steps.', false);
   });
   $('cabModel').addEventListener('change', () => {
     const c = M.CABINETS.find((x) => x.id === $('cabModel').value); if (!c) return;
@@ -203,15 +384,28 @@ function initControls() {
   $('cmpRows').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickRow(e); } });
   segs.bal = bindSeg('segBal', (v) => { if (v === 'auto') S.ballastAuto = true; else ensureManual(); update(); });
   segs.pos = bindSeg('segPos', (v) => { S.ballastPos = v; update(); });
-  segs.speed = bindSeg('segSpeed', (v) => { ui.speed = +v; segs.speed.set(v); });
+  segs.speed = bindSeg('segSpeed', (v) => { ui.speed = +v; segs.speed.set(v); $('btnSpeed').textContent = v + '×'; saveSoon(); });
+  $('btnSpeed').addEventListener('click', () => { ui.speed = ui.speed === 1 ? 2 : ui.speed === 2 ? 4 : 1; segs.speed.set(ui.speed); $('btnSpeed').textContent = ui.speed + '×'; saveSoon(); });
   segs.cam = bindSeg('segCam', (v) => { ui.cam = v; ui.camTAz = CAM_PRESETS[v].az; ui.camTEl = CAM_PRESETS[v].el; segs.cam.set(v); });
   segs.exag = bindSeg('segExag', (v) => { ui.exag = v; segs.exag.set(v); update(); });
   $('btnAutoN').addEventListener('click', () => { S.autoN = !S.autoN; update(); });
   document.querySelectorAll('[data-dir]').forEach((b) => b.addEventListener('click', () => { S.windDir = +b.dataset.dir; update(); }));
-  document.querySelectorAll('[data-scn]').forEach((b) => b.addEventListener('click', () => loadScenario(b.dataset.scn)));
-  $('btnReset').addEventListener('click', () => loadScenario('sheet'));
-  $('btnReplay').addEventListener('click', () => { sim.reset(); ui.paused = false; syncPause(); });
-  $('btnPause').addEventListener('click', () => { ui.paused = !ui.paused; syncPause(); });
+  selectSet = initTabs('setTabs', (n) => { ui.tab = n; saveSoon(); });
+  selectRes = initTabs('resTabs', (n) => { ui.rtab = n; dirty.rear = dirty.map = dirty.bend = true; saveSoon(); });
+  document.querySelectorAll('[data-goto]').forEach((b) => b.addEventListener('click', () => { selectSet(b.dataset.goto); scrollRailTop(); }));
+  document.querySelectorAll('[data-sf]').forEach((b) => b.addEventListener('click', () => { S.SF = +b.dataset.sf; update(); }));
+  $('btnNew').addEventListener('click', newWall);
+  for (const id of ['btnStart', 'btnStart3', 'btnReplay']) $(id).addEventListener('click', startSim);
+  $('btnEnd').addEventListener('click', endSim);
+  $('btnPause').addEventListener('click', pauseSim);
+  $('toastUndo').addEventListener('click', undo); $('toastX').addEventListener('click', hideToast);
+  $('vsChange').addEventListener('click', () => { selectSet('load', true); scrollRailTop(); });
+  $('btnUseNeed').addEventListener('click', () => { setBallastAll(Math.ceil(D.req.per * 10) / 10); update(); });
+  $('btnReset').addEventListener('click', () => {                                  // only the advanced values: the wall is left alone
+    const d = M.defaults();
+    S.EI = d.EI; S.gaRatio = d.gaRatio; S.defLimit = d.defLimit; S.Cf = d.Cf; S.depth = d.depth; S.mu = d.mu; S.stage.muDeck = d.stage.muDeck; S.frame = Object.assign({}, d.frame);
+    update(); toast('Advanced values are back to the sheet’s.', false);
+  });
   $('btnInset').addEventListener('click', () => { ui.showInset = !ui.showInset; $('btnInset').setAttribute('aria-pressed', String(ui.showInset)); });
   $('selClear').addEventListener('click', () => { ui.selected = -1; update(); });
   const step = (kg) => (kg < 20 ? 0.5 : kg < 100 ? 2 : kg < 500 ? 10 : 50);
@@ -222,16 +416,12 @@ function initControls() {
   $('selAll').addEventListener('click', () => { if (ui.selected >= 0) { setBallastAll(D.ballast[ui.selected]); update(); } });
   document.querySelectorAll('details.tv').forEach((d) => d.addEventListener('toggle', () => { if (d.open) renderTables(); }));
 }
-function syncPause() {
-  $('btnPause').setAttribute('aria-pressed', String(ui.paused));
-  $('btnPause').querySelector('use').setAttribute('href', ui.paused ? '#i-play' : '#i-pause');
-}
 function syncControls() {
   const cabH = M.cabHeight(S.cabSize);
   $('H-r').step = cabH; $('H-n').step = cabH;
   for (const k in pairs) pairs[k].sync();
   $('SC-r').value = S.indoorScale; $('SC-r').style.setProperty('--p', (S.indoorScale / 10 * 100) + '%');
-  segs.mode.set(S.mode); segs.bal.set(S.ballastAuto ? 'auto' : 'manual'); segs.pos.set(S.ballastPos); segs.speed.set(ui.speed);
+  segs.mode.set(S.mode); segs.bal.set(S.ballastAuto ? 'auto' : 'manual'); segs.pos.set(S.ballastPos); segs.speed.set(ui.speed); $('btnSpeed').textContent = ui.speed + '×';
   segs.cab.set(S.cabSize); if ($('cabModel').value !== S.cab) $('cabModel').value = S.cab;
   segs.stage.set(S.stage.on ? 'on' : 'off'); segs.rest.set(S.rest.type); segs.rto.set(S.rest.to); segs.rside.set(S.rest.side); segs.prof.set(S.profile);
   segs.cam.set(ui.cam); segs.exag.set(ui.exag);
@@ -252,34 +442,6 @@ function syncControls() {
   const sel = ui.selected >= 0;
   $('selBox').hidden = !sel;
   if (sel) { $('selName').textContent = 'Base ' + (ui.selected + 1) + ' of ' + D.N; if (document.activeElement !== $('selVal')) $('selVal').value = fmtB(D.ballast[ui.selected]); }
-}
-
-function loadScenario(name) {
-  const keepSpeed = ui.speed;
-  const d = M.defaults();
-  for (const k in d) S[k] = d[k];
-  S.frame = Object.assign({}, d.frame); S.stage = Object.assign({}, d.stage); S.rest = Object.assign({}, d.rest);
-  ui.selected = -1; ui.speed = keepSpeed; fillCabModels();
-  if (name === 'noballast') { S.ballastAuto = false; S.ballastPer = 0; S.ballast = null; }
-  if (name === 'draft') { S.indoorScale = 4; S.ballastAuto = false; S.ballastPer = 9.055; S.ballast = null; }
-  if (name === 'front') { S.indoorScale = 4; S.windDir = 180; }
-  const sheetBallast = () => { S.ballastAuto = false; S.ballastPer = 9.055; S.ballast = null; };
-  if (name === 'door') { S.indoorCase = 'door'; S.door = { v: 5.4, dur: 1.2 }; sheetBallast(); }
-  if (name === 'knock') { S.indoorCase = 'knock'; S.knock = { kgf: 60, h: 1.2, from: 'rear', dur: 0.3, share: 2 }; sheetBallast(); }
-  if (name === 'wobble') {
-    S.indoorCase = 'sway'; S.sway = { amp: 9, f: 2, bounce: 0.1 }; S.ballastAuto = false; S.ballastPer = 60; S.ballast = null;
-    S.stage.on = true; S.stage.h = 1.2; S.stage.depth = 6; S.stage.front = 4.6;
-  }
-  if (name === 'quake') { S.indoorCase = 'quake'; S.quake = { pga: 0.24, floor: 1, dur: 12 }; sheetBallast(); }
-  if (name === 'breeze') { S.mode = 'outdoor'; S.outSpeed = 8; S.gust = 0.3; }
-  if (name === 'gale') { S.mode = 'outdoor'; S.outSpeed = 14; S.gust = 0.4; S.ballastAuto = false; S.ballastPer = 300; S.ballast = null; }
-  if (name === 'stage') { S.mode = 'outdoor'; S.outSpeed = 8; S.gust = 0.3; S.stage.on = true; S.stage.h = 1.6; S.stage.depth = 6; S.stage.front = 4.6; }
-  if (name === 'straps') {
-    S.mode = 'outdoor'; S.outSpeed = 10; S.gust = 0.3; S.ballastAuto = false; S.ballastPer = 100; S.ballast = null;
-    S.stage.on = true; S.stage.h = 1.2; S.stage.depth = 6; S.stage.front = 4.6;
-    S.rest = Object.assign(S.rest, { type: 'strap', n: 0, a: 0, d: 0, to: 'floor', wll: 2000, anchorKg: 0, side: 'rear' });
-  }
-  sig = ''; update(); sim.reset(); ui.paused = false; syncPause();
 }
 
 /* ------------------------------------------------------------------ text */
@@ -311,7 +473,9 @@ function renderText() {
   setHint('H-h', D.rows + ' rows of ' + (D.cabH * 1000) + ' mm · ' + (D.cols * D.rows) + ' cabinets in all');
   setHint('K-h', nf1(cabKg()) + ' kg per ' + cabLabel + ' cabinet · the screen weighs ' + nf0(D.Ws) + ' kg');
   setHint('N-h', D.spacingOK ? 'One base every ' + nf2(D.spacing) + ' m. Sheet rule: ' + D.sheetN + ' for this width.' : 'One base every ' + nf2(D.spacing) + ' m. The sheet wants at most 1 m, so ' + D.sheetN + ' bases.', D.spacingOK ? '' : 'warn');
-  setHint('B-h', S.ballastAuto ? 'Solves for ' + (sp || stg ? 'the smallest ballast that works with your ' + [stg ? 'stage' : '', sp ? 'straps' : ''].filter(Boolean).join(' and ') : 'the sheet result') + ': ' + nf2(D.req.per) + ' kg per base' + (D.req.capped ? ' (capped, not enough)' : '') + '. Move the slider to take over.' : nf1(D.Wb) + ' kg on ' + D.N + ' bases' + (D.req.none ? '. Nothing is needed here.' : '. Needed: ' + nf2(D.req.per) + ' kg per base.'));
+  setHint('B-h', S.ballastAuto ? 'Worked out for you: ' + (D.req.none ? 'nothing is needed' : nf2(D.req.per) + ' kg per base is the least that gives your ' + nf2(S.SF) + '× margin') + (D.req.capped ? ' (more than the solver allows, so ballast alone cannot do it)' : '') + '. Drag the slider or type a weight to enter your own.'
+    : nf1(D.Wb) + ' kg in total on ' + D.N + ' bases, ' + nf1(avg) + ' each. ' + (D.req.none ? 'Nothing is needed here.' : D.req.capped ? 'Ballast alone cannot reach your margin here.' : 'Needed: ' + nf2(D.req.per) + ' kg per base.'));
+  const needBtn = $('btnUseNeed'); needBtn.hidden = S.ballastAuto || D.req.none || D.req.capped || Math.abs(D.req.per - avg) < 0.05; needBtn.textContent = 'Use ' + nf1(Math.ceil(D.req.per * 10) / 10) + ' kg per base';
   setText('posNote', 'arm ' + nf(g.aB, 3) + ' m from the toe');
   setText('modeHint', outdoor ? 'Open-air wind with gusts. The sheet is written for indoor use, so treat this as a rough guide.' : 'Draught from air conditioning, fans and doors. Uses the wind scale from the sheet, which is the Beaufort scale.');
   const row = M.SCALE[S.indoorScale];
@@ -391,7 +555,7 @@ function renderText() {
   $('tTip').firstChild.textContent = lv.infin ? '∞' : lv.crit; $('tTip').querySelector('small').textContent = lv.infin ? '' : lv.unit;
   setText('tTipS', lv.infin ? lv.none : lv.critS);
 
-  renderBend(); renderMoments(); renderChecks(); renderSheet(); renderTables(); renderIndoor();
+  renderBend(); renderMoments(); renderChecks(); renderSheet(); renderTables(); renderIndoor(); renderStrip(avg);
   setText('planInfo', isWind ? nf0(w.cn * 100) + '% pushes the screen · ' + nf0(Math.abs(w.sinT) * 100) + '% slides along it'
     : kindL === 'force' ? (S.knock.from === 'both' ? 'the push is checked from the front and from the rear' : 'push from the ' + S.knock.from)
     : 'the floor moves front to back; the wall tips whichever way is weaker');
@@ -405,7 +569,7 @@ function renderText() {
   $('frontLegend').textContent = '';
   const lg = (txtv, col) => { const s2 = el('span'); const i = el('i'); i.style.background = col; s2.appendChild(i); s2.append(txtv); $('frontLegend').appendChild(s2); };
   lg('LED face', 'var(--c-screen)'); if (stg) lg('Stage', '#8a97a8'); if (sp) lg(RT[sp.type], '#ffb020'); lg(isWind ? 'Wind' : kindL === 'force' ? 'Push' : 'Shaking', '#d6409f');
-  setText('legForce', isWind ? 'Wind force' : kindL === 'force' ? 'Push' : 'Inertia force');
+  setText('legForce', isWind ? 'Wind force' : kindL === 'force' ? 'Push' : 'Shaking force');
 }
 
 /* ------------------------------------------------------------------ indoor loads: wording, limits, comparison */
@@ -524,6 +688,17 @@ function renderIndoor() {
   setText('cmpHint', 'Click a row to play that load. “Needs” is the ballast per base for ' + nf2(S.SF) + '× on its own, with the ballast where it works best. The ' + (most.none ? 'weight alone covers every case.' : most.name.toLowerCase() + ' asks for the most.'));
 }
 
+function renderStrip(avg) {                         // the verdict strip under the side view: always on screen
+  const vs = $('vstrip'), status = D.status;
+  vs.dataset.s = status;
+  $('vsIcon').querySelector('use').setAttribute('href', '#' + (status === 'stable' ? 'i-check' : status === 'marginal' ? 'i-warn' : 'i-x'));
+  setText('vsLabel', status === 'stable' ? 'Stable' : status === 'marginal' ? 'Marginal' : 'Will tip over');
+  setText('vsSF', sfTxt(D.SFact) + '×'); setText('vsReq', nf2(S.SF) + '×');
+  setText('vsNeed', D.req.none ? '0' : D.req.capped ? '> ' + nf0(M.MAX_BALLAST) : nf(D.req.per)); setText('vsHave', nf(avg));
+  setText('vsAuto', S.ballastAuto ? 'worked out' : 'you entered');
+  setText('vsLoad', currentLoadText());
+}
+
 function renderBend() {
   const b = D.bend, sp = D.strap, L = b.L, topAbs = Math.abs(b.topEl);
   const topMm = topAbs * 1000, ratio = topAbs > 1e-9 ? L / topAbs : Infinity;
@@ -573,11 +748,11 @@ function renderChecks() {
     const li = el('li', cls); li.appendChild(icon(ICON[cls])); const d = el('div'); const bb = el('span'); bb.textContent = html; d.appendChild(bb);
     if (small) { d.appendChild(document.createElement('br')); d.appendChild(el('small', null, small)); } li.appendChild(d); ul.appendChild(li);
   };
-  if (D.loadCase === 'draught' || D.loadCase === 'outdoor') add(w.bft < 7 ? 'ok' : 'wn', w.bft < 7 ? 'Beaufort ' + w.bft + '. Within the sheet limit (below 7).' : 'Beaufort ' + w.bft + ' is above the sheet limit (below 7). Treat the result as a rough guide only.', 'Statement 1');
+  if (D.loadCase === 'draught' || D.loadCase === 'outdoor') add(w.bft < 7 ? 'ok' : 'wn', w.bft < 7 ? 'Beaufort ' + w.bft + '. Within the sheet limit (below 7).' : 'Beaufort ' + w.bft + ' is above the sheet limit (below 7). Treat the result as a rough guide only.');
   const rows = []; for (let r = 2; r <= D.rows; r += 2) rows.push(r); if (D.rows % 2 === 1) rows.push(D.rows);
-  add('in', 'Tie each back frame to the screen at rows ' + rows.join(', ') + ' (every 2nd row, topmost included).', 'Statement 2 · the cyan connectors in the drawing' + (D.cabH === 0.5 ? ' · with 500 mm cabinets that is every 1 m' : ''));
-  add(D.spacingOK ? 'ok' : 'wn', D.spacingOK ? 'Bases are ' + nf2(D.spacing) + ' m apart (at most 1 m, first and last column included).' : 'Bases are ' + nf2(D.spacing) + ' m apart. The sheet asks for a connection at least every 1 m, which means ' + D.sheetN + ' bases.', 'Statement 3');
-  if (isWindK) add('in', D.dir === 'rear' ? 'Rear wind is the critical case. Keep the ballast at the rear end of each base, ' + nf(D.geom.aB, 3) + ' m behind the toe.' : 'Front wind: the screen’s own weight works with you (arm ' + nf(D.geom.aS, 3) + ' m). The sheet puts the ballast mid-base for this direction.', 'Statement 5');
+  add('in', 'Tie each back frame to the screen at rows ' + rows.join(', ') + ' (every 2nd row, topmost included).', 'the cyan connectors in the drawing' + (D.cabH === 0.5 ? ' · with 500 mm cabinets that is every 1 m' : ''));
+  add(D.spacingOK ? 'ok' : 'wn', D.spacingOK ? 'Bases are ' + nf2(D.spacing) + ' m apart (at most 1 m, first and last column included).' : 'Bases are ' + nf2(D.spacing) + ' m apart. The sheet asks for a connection at least every 1 m, which means ' + D.sheetN + ' bases.', '');
+  if (isWindK) add('in', D.dir === 'rear' ? 'Rear wind is the critical case. Keep the ballast at the rear end of each base, ' + nf(D.geom.aB, 3) + ' m behind the toe.' : 'Front wind: the screen’s own weight works with you (arm ' + nf(D.geom.aS, 3) + ' m). The sheet puts the ballast mid-base for this direction.', '');
   else {
     if (D.both) {
       const f = D.sides.fwd.SFact, bk = D.sides.back.SFact, lvl = (v) => (v >= S.SF - 1e-9 ? 'ok' : v >= 1 - 1e-9 ? 'wn' : 'bd');
@@ -590,7 +765,7 @@ function renderChecks() {
     }
     if (D.strap && (D.loadCase === 'knock' || D.loadCase === 'sway' || D.loadCase === 'quake')) add('wn', 'A sudden load can double the pull on a strap or cable. The static figures here do not show that.', 'Keep the strap rating well above the pull shown');
   }
-  if (D.req.none && !sp && !stg) add('ok', 'Required ballast is negative (' + nf1(D.req.totalRaw) + ' kg), so no extra ballast is needed.', 'Statement 6');
+  if (D.req.none && !sp && !stg) add('ok', 'Required ballast is negative (' + nf1(D.req.totalRaw) + ' kg), so no extra ballast is needed.', '');
 
   if (stg) {
     const lw = D.lam.lamW, ls = D.lam.lamS;
@@ -623,7 +798,7 @@ function renderChecks() {
   if (D.req.per > 100) add('wn', 'It needs ' + nf0(D.req.per) + ' kg on every base. That is a lot for a base plate. More bases, a deeper base, straps or anchoring would help.');
   const lo = Math.min(...D.local), lowI = D.local.indexOf(lo);
   if (lo < S.SF - 1e-9 && D.status === 'stable') add('wn', 'Uneven ballast: base ' + (lowI + 1) + ' only holds ' + nf2(lo) + '× its share of the wind. The screen has to carry load between bases.');
-  add('in', 'A rough reference only. It cannot replace a structural simulation or a practical test.', 'Statement 4');
+  add('in', 'A rough reference only. It cannot replace a structural simulation or a practical test.', '');
 }
 
 function renderSheet() {
@@ -673,13 +848,16 @@ function renderTables() {
 
 /* ------------------------------------------------------------------ live HUD */
 let hudKey = '';
-function hudCells() {                          // the two live readouts at the top of the side view, for the load in play
+function hudCells() {
+  const c = hudCells0(); if (ui.run === 'idle') { c[1] = '–'; c[3] = '–'; } return c;
+}
+function hudCells0() {                          // the two live readouts at the top of the side view, for the load in play
   const L = sim.lam, kind = D.loadKind, cs = D.loadCase;
   if (kind === 'wind') { const vNow = D.wind.vPeak * sim.lastU; return [cs === 'door' ? 'Gust now' : 'Wind now', nf1(vNow) + ' m/s · Bft ' + M.beaufort(vNow), 'Force', nf0(D.F.kgf * sim.lastU * sim.lastU) + ' kgf']; }
   if (kind === 'force') return ['Pushed from', Math.abs(L) < 0.02 ? '–' : 'the ' + (D.shake ? (L > 0 ? 'rear' : 'front') : D.dir), 'Push', nf0(S.knock.kgf * Math.abs(L)) + ' kgf'];
   const aNow = L * D.rig.acc / M.G;                                                                 // g at the wall's base, + tips it forward
   const c1 = cs === 'sway' ? ['Deck moves', nf1(S.sway.amp * sim.ground) + ' mm'] : cs === 'quake' ? ['Ground shakes', nf2(Math.abs(aNow) / S.quake.floor) + ' g'] : ['Load now', nf1(S.notional.pct * Math.abs(L)) + '%'];
-  return [c1[0], c1[1], 'Inertia force', nf0(D.F.kgf * Math.abs(L)) + ' kgf'];
+  return [c1[0], c1[1], 'Shaking force', nf0(D.F.kgf * Math.abs(L)) + ' kgf'];
 }
 function updateHud() {
   const u = sim.lastU, deg = sim.phi * 180 / Math.PI, hc = hudCells();
@@ -733,7 +911,11 @@ function initPointers() {
     deg = Math.round(deg / 5) * 5; for (const m of [0, 90, 180, 270]) if (Math.abs(deg - m) <= 4) deg = m;
     S.windDir = deg % 360; update();
   };
-  plan.addEventListener('pointerdown', (e) => { dragD = true; plan.classList.add('drag'); plan.setPointerCapture(e.pointerId); setDir(e); });
+  plan.addEventListener('pointerdown', (e) => {
+    if (D.loadKind !== 'wind') return;
+    if (e.pointerType !== 'mouse') { const hd = hits.handle, p = ptr(e, plan); if (!hd || Math.hypot(p.x - hd.x, p.y - hd.y) > 34) return; }
+    dragD = true; plan.classList.add('drag'); plan.setPointerCapture(e.pointerId); setDir(e);
+  });
   plan.addEventListener('pointermove', (e) => { if (dragD) setDir(e); });
   const endD = () => { dragD = false; plan.classList.remove('drag'); };
   plan.addEventListener('pointerup', endD); plan.addEventListener('pointercancel', endD);
@@ -796,36 +978,48 @@ function initPointers() {
 let last = performance.now(), acc = 0;
 const seenErr = {};
 function safe(name, fn) { try { fn(); } catch (e) { if (!seenErr[name]) { seenErr[name] = true; console.error(name + ' drawing failed:', e); } } }
+const shown = (id) => { const e = $(id); return !!(e && e.getClientRects().length); };
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  if (!ui.paused) {
+  if (ui.run === 'running') {
     acc += dt * ui.speed;
     let n = 0; while (acc >= SUB && n < 260) { sim.step(SUB); acc -= SUB; n++; }
     if (acc > SUB * 260) acc = 0;
     st.t += dt;
     if (st.V) advanceScene(dt, D.loadKind === 'wind' ? D.wind.vPeak * sim.lastU * D.wind.cn : 0, D.dir === 'rear' ? 1 : -1, st.V);
+    checkFinish();
   }
   ui.camAz += (ui.camTAz - ui.camAz) * 0.14; ui.camEl += (ui.camTEl - ui.camEl) * 0.14;
   safe('side', () => drawSide($('side'), st));
-  safe('front', () => drawFront($('front'), st));
-  safe('plan', () => drawPlan($('plan'), st, hits));
-  if (dirty.rear) { safe('rear', () => drawRear($('rear'), st, hits)); dirty.rear = false; }
-  if (dirty.map) { safe('map', () => drawMap($('map'), st, hits)); dirty.map = false; }
-  if (dirty.bend) { safe('bend', () => drawBend($('bendC'), st)); dirty.bend = false; }
+  if (shown('front')) safe('front', () => drawFront($('front'), st));                // a canvas in a hidden tab has no size, so it is skipped
+  if (shown('plan')) safe('plan', () => drawPlan($('plan'), st, hits));
+  if (dirty.rear && shown('rear')) { safe('rear', () => drawRear($('rear'), st, hits)); dirty.rear = false; }
+  if (dirty.map && shown('map')) { safe('map', () => drawMap($('map'), st, hits)); dirty.map = false; }
+  if (dirty.bend && shown('bendC')) { safe('bend', () => drawBend($('bendC'), st)); dirty.bend = false; }
   safe('hud', updateHud);
   requestAnimationFrame(frame);
 }
 
+function fitScrollPadding() {                       // on a phone the picture sticks to the top, so anything scrolled to must stop below it
+  const sb = document.querySelector('.stickbox'), root = document.documentElement;
+  const fit = () => { root.style.scrollPaddingTop = getComputedStyle(sb).position === 'sticky' ? Math.ceil(sb.getBoundingClientRect().height) + 8 + 'px' : ''; };
+  if (window.ResizeObserver) new ResizeObserver(fit).observe(sb);
+  window.addEventListener('resize', fit); fit();
+}
 function init() {
-  initControls(); initPointers();
+  const restored = loadSaved();
+  initControls(); initPointers(); initMenu(); initKeys(); fitScrollPadding();
+  if (window.ResizeObserver) new ResizeObserver(() => { $('btnInset').hidden = $('side').clientWidth < 640; }).observe($('side'));      // the zoomed base detail needs the room
+  selectSet(ui.tab); selectRes(ui.rtab);
   update(); sim.reset();
+  if (restored && JSON.stringify(S) !== JSON.stringify(M.defaults())) toast('Your last wall is back. Press New wall to start again.', false);
   for (const id of ['rear', 'map', 'bendC']) new ResizeObserver(() => { dirty.rear = dirty.map = dirty.bend = true; }).observe($(id));
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { dirty.rear = dirty.map = dirty.bend = true; });
   const themeChanged = () => { resetTheme(); dirty.rear = dirty.map = dirty.bend = true; };
   try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', themeChanged); } catch (e) { /* older browsers */ }
   new MutationObserver(themeChanged).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] });
-  window.__led = { S, sim, ui, hits, st, get D() { return D; }, M, update, loadScenario,
-    redraw() { drawSide($('side'), st); drawFront($('front'), st); drawPlan($('plan'), st, hits); drawRear($('rear'), st, hits); drawMap($('map'), st, hits); drawBend($('bendC'), st); updateHud(); },
+  window.__led = { S, sim, ui, hits, st, get D() { return D; }, M, update, loadScenario, applyExample, newWall, undo, startSim, endSim, pauseSim, setState,
+    redraw() { drawSide($('side'), st); if (shown('front')) drawFront($('front'), st); if (shown('plan')) drawPlan($('plan'), st, hits); if (shown('rear')) drawRear($('rear'), st, hits); if (shown('map')) drawMap($('map'), st, hits); if (shown('bendC')) drawBend($('bendC'), st); updateHud(); },
     bench(n) { n = n || 30; const t0 = performance.now(); for (let i = 0; i < n; i++) { drawSide($('side'), st); drawFront($('front'), st); drawPlan($('plan'), st, hits); } const t1 = performance.now(); for (let i = 0; i < n; i++) { drawMap($('map'), st, hits); drawRear($('rear'), st, hits); drawBend($('bendC'), st); } const t2 = performance.now(); const t3 = performance.now(); for (let i = 0; i < n; i++) { M.derive(S); } const t4 = performance.now(); return { perFrameMs: (t1 - t0) / n, perDirtyMs: (t2 - t1) / n, deriveMs: (t4 - t3) / n }; } };
   requestAnimationFrame(frame);
 }
