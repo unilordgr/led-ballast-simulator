@@ -76,10 +76,10 @@ svg.ic{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-wid
 }
 @media (min-width:1300px){
   .grid{grid-template-columns:316px minmax(0,1fr) 366px;grid-template-rows:auto 1fr auto}
-  .rail{grid-row:1 / span 2}
+  .rail{grid-row:1 / span 3}                                   /* the controls stay pinned right down to the checks, so nothing slides under them */
   .view{grid-column:2;grid-row:1}.rest{grid-column:2;grid-row:2;align-self:start}
   .results{grid-column:3;grid-row:1 / span 2}
-  .more{grid-column:1 / -1;grid-row:3}
+  .more{grid-column:2 / -1;grid-row:3}
 }
 .more{display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
 @media (min-width:760px){.more{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
@@ -274,6 +274,21 @@ details.tv>summary:hover{color:var(--ink)}
 #bendC{touch-action:pan-y}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 
+/* ---------- indoor load picker and comparison table ---------- */
+.seg.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.seg.grid3 button{padding:0 4px;font-size:12.5px}
+table.cmp td,table.cmp th{white-space:normal}
+table.cmp tbody tr{cursor:pointer}
+table.cmp tbody tr:hover{background:var(--panel2)}
+table.cmp tbody tr[aria-selected="true"]{background:var(--accent-wash)}
+table.cmp td:first-child{font-family:var(--font-body);font-variant-numeric:normal}
+table.cmp td:first-child small{display:block;font-size:11.5px;color:var(--ink3)}
+table.cmp td.sf{font-weight:600}
+table.cmp td.sf[data-s="stable"]{color:var(--good-ink)}
+table.cmp td.sf[data-s="marginal"]{color:var(--warn-ink)}
+table.cmp td.sf[data-s="tipping"]{color:var(--crit-ink)}
+table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radius:4px;background:var(--accent-wash);color:var(--ink2);font:600 10px var(--font-body);letter-spacing:.04em;text-transform:uppercase}
+
 [hidden]{display:none!important}
 </style>
 </head>
@@ -315,6 +330,10 @@ details.tv>summary:hover{color:var(--ink)}
       <button class="chip" type="button" data-scn="noballast">No ballast</button>
       <button class="chip" type="button" data-scn="draft">Strong draught</button>
       <button class="chip" type="button" data-scn="front">Front draught</button>
+      <button class="chip" type="button" data-scn="door">Door gust</button>
+      <button class="chip" type="button" data-scn="knock">Knock</button>
+      <button class="chip" type="button" data-scn="wobble">Stage wobble</button>
+      <button class="chip" type="button" data-scn="quake">Earthquake</button>
       <button class="chip" type="button" data-scn="breeze">Outdoor breeze</button>
       <button class="chip" type="button" data-scn="gale">Outdoor gale</button>
       <button class="chip" type="button" data-scn="stage">On a stage</button>
@@ -330,8 +349,8 @@ details.tv>summary:hover{color:var(--ink)}
         <div class="hud tl">
           <div class="pill" id="pill" data-s="stable" role="status"><svg class="ic"><use href="#i-check"/></svg><span id="pillText">Stable</span></div>
           <dl class="live" id="live">
-            <div><dt>Wind now</dt><dd id="liveWind">3.3 m/s</dd></div>
-            <div><dt>Force</dt><dd id="liveForce">68 kgf</dd></div>
+            <div><dt id="liveWindK">Wind now</dt><dd id="liveWind">3.3 m/s</dd></div>
+            <div><dt id="liveForceK">Force</dt><dd id="liveForce">68 kgf</dd></div>
             <div><dt>Tilt</dt><dd id="liveTilt">0.00°</dd></div>
             <div><dt>Top moves</dt><dd id="liveTop">0 mm</dd></div>
           </dl>
@@ -352,7 +371,7 @@ details.tv>summary:hover{color:var(--ink)}
             <span><i style="background:var(--c-frame)"></i>Back frame</span>
             <span><i style="background:#e9b422"></i>Base plate</span>
             <span><i style="background:var(--c-ballast)"></i>Ballast</span>
-            <span><i style="background:#d6409f"></i>Wind force</span>
+            <span><i style="background:#d6409f"></i><em id="legForce" style="font-style:normal">Wind force</em></span>
             <span><i style="background:#ef4444"></i>Tipping pivot</span>
             <span id="legStrap"><i style="background:#ffb020"></i>Strap</span>
             <span id="legStage"><i style="background:#8a97a8"></i>Stage</span>
@@ -535,16 +554,129 @@ details.tv>summary:hover{color:var(--ink)}
         </div>
       </section>
 
-      <section class="sec">
-        <h2>Wind</h2>
+      <section class="sec" id="secLoad">
+        <h2 id="loadH">Wind</h2>
+        <div id="indoorPick" hidden>
+          <div class="seg grid3" id="segCase" role="radiogroup" aria-label="What pushes on the wall indoors">
+            <button type="button" role="radio" aria-checked="true" data-v="draught" title="The sheet's allowance for moving air">Draught</button>
+            <button type="button" role="radio" aria-checked="false" data-v="door" title="A door opens and air rushes in for a moment">Door gust</button>
+            <button type="button" role="radio" aria-checked="false" data-v="knock" title="Someone leans on it, bumps it or pushes a trolley into it">Knock</button>
+            <button type="button" role="radio" aria-checked="false" data-v="sway" title="The deck wobbles under dancers or a crowd">Stage sway</button>
+            <button type="button" role="radio" aria-checked="false" data-v="quake" title="The ground shakes">Earthquake</button>
+            <button type="button" role="radio" aria-checked="false" data-v="notional" title="The sideways load building rules ask for when nothing else is known">Code min.</button>
+          </div>
+          <p class="hint" id="caseHint"></p>
+        </div>
         <div id="windIndoor">
           <div class="ctl">
-            <label for="SC-r">Wind scale <small id="SC-v"></small></label>
+            <label for="SC-r">Beaufort <small id="SC-v"></small></label>
             <div class="ctl-line" style="grid-template-columns:1fr"><input type="range" id="SC-r" min="0" max="10" step="1"></div>
             <p class="hint" id="SC-h"></p>
           </div>
         </div>
+        <div id="caseDoor" hidden>
+          <div class="ctl">
+            <label for="DG-n">Gust speed <small id="DG-v"></small></label>
+            <div class="ctl-line"><input type="range" id="DG-r" min="0" max="15" step="0.1" aria-label="Door gust speed slider"><span class="field"><input type="number" id="DG-n" min="0" max="30" step="0.1" inputmode="decimal"><span class="u">m/s</span></span></div>
+            <p class="hint" id="DG-h"></p>
+          </div>
+          <div class="ctl">
+            <label for="DD-n">Lasts</label>
+            <div class="ctl-line"><input type="range" id="DD-r" min="0.1" max="8" step="0.1" aria-label="Gust duration slider"><span class="field"><input type="number" id="DD-n" min="0.05" max="20" step="0.1" inputmode="decimal"><span class="u">s</span></span></div>
+            <p class="hint" id="DD-h"></p>
+          </div>
+        </div>
+        <div id="caseKnock" hidden>
+          <div class="ctl">
+            <div class="lab">Push comes from</div>
+            <div class="seg" id="segKFrom" role="radiogroup" aria-label="Which side the push comes from">
+              <button type="button" role="radio" aria-checked="true" data-v="both" title="Check both and report the weaker side">Worst side</button>
+              <button type="button" role="radio" aria-checked="false" data-v="front" title="From the audience side: tips the wall backward">Front</button>
+              <button type="button" role="radio" aria-checked="false" data-v="rear" title="From behind: tips the wall forward">Rear</button>
+            </div>
+          </div>
+          <div class="ctl">
+            <label for="KG-n">Push <small id="KG-v"></small></label>
+            <div class="ctl-line"><input type="range" id="KG-r" min="0" max="150" step="1" aria-label="Push force slider"><span class="field"><input type="number" id="KG-n" min="0" max="500" step="1" inputmode="decimal"><span class="u">kgf</span></span></div>
+            <div class="dirbtns" style="margin-top:8px">
+              <button type="button" class="btn sm" data-kg="20" data-kd="1.5" title="A person leaning on it">Lean 20</button>
+              <button type="button" class="btn sm" data-kg="50" data-kd="0.3" title="A hard shove or a stumble">Shove 50</button>
+              <button type="button" class="btn sm" data-kg="100" data-kd="0.15" title="A loaded trolley or flight case">Trolley 100</button>
+            </div>
+            <p class="hint" id="KG-h"></p>
+          </div>
+          <div class="ctl">
+            <label for="KH-n">Height of the push</label>
+            <div class="ctl-line"><input type="range" id="KH-r" min="0.3" max="6" step="0.1" aria-label="Height of the push slider"><span class="field"><input type="number" id="KH-n" min="0.1" max="20" step="0.1" inputmode="decimal"><span class="u">m</span></span></div>
+          </div>
+          <div class="ctl">
+            <label for="KD-n">Lasts</label>
+            <div class="ctl-line"><input type="range" id="KD-r" min="0.05" max="3" step="0.05" aria-label="Push duration slider"><span class="field"><input type="number" id="KD-n" min="0.05" max="10" step="0.05" inputmode="decimal"><span class="u">s</span></span></div>
+          </div>
+          <div class="ctl">
+            <label for="KS-n">Bases that share it</label>
+            <div class="ctl-line"><input type="range" id="KS-r" min="1" max="6" step="1" aria-label="Number of bases sharing the push slider"><span class="field"><input type="number" id="KS-n" min="1" max="60" step="1" inputmode="numeric"><span class="u">×</span></span></div>
+            <p class="hint" id="KS-h"></p>
+          </div>
+        </div>
+        <div id="caseSway" hidden>
+          <div class="ctl">
+            <label for="SA-n">Deck moves by <small id="SA-v"></small></label>
+            <div class="ctl-line"><input type="range" id="SA-r" min="0" max="30" step="0.5" aria-label="Sway amplitude slider"><span class="field"><input type="number" id="SA-n" min="0" max="100" step="0.5" inputmode="decimal"><span class="u">mm</span></span></div>
+            <div class="dirbtns" style="margin-top:8px">
+              <button type="button" class="btn sm" data-sa="2" data-sq="1.5" title="You can only just see it">Slight 2</button>
+              <button type="button" class="btn sm" data-sa="5" data-sq="1.5" title="Noticeable wobble underfoot">Wobble 5</button>
+              <button type="button" class="btn sm" data-sa="12" data-sq="2" title="A crowd jumping on the deck">Jumping 12</button>
+            </div>
+          </div>
+          <div class="ctl">
+            <label for="SQ-n">Back and forth</label>
+            <div class="ctl-line"><input type="range" id="SQ-r" min="0.3" max="5" step="0.1" aria-label="Sway frequency slider"><span class="field"><input type="number" id="SQ-n" min="0.1" max="10" step="0.1" inputmode="decimal"><span class="u">Hz</span></span></div>
+          </div>
+          <div class="ctl">
+            <label for="SB-n">Up and down too <small>share of g</small></label>
+            <div class="ctl-line"><input type="range" id="SB-r" min="0" max="0.5" step="0.01" aria-label="Bounce slider"><span class="field"><input type="number" id="SB-n" min="0" max="0.9" step="0.01" inputmode="decimal"><span class="u">g</span></span></div>
+            <p class="hint" id="SA-h"></p>
+          </div>
+        </div>
+        <div id="caseQuake" hidden>
+          <div class="ctl">
+            <label for="QP-n">Ground acceleration <small id="QP-v"></small></label>
+            <div class="ctl-line"><input type="range" id="QP-r" min="0.02" max="0.8" step="0.01" aria-label="Ground acceleration slider"><span class="field"><input type="number" id="QP-n" min="0.01" max="1.5" step="0.01" inputmode="decimal"><span class="u">g</span></span></div>
+            <div class="dirbtns" style="margin-top:8px">
+              <button type="button" class="btn sm" data-pga="0.16" title="Greek seismic zone I">Zone I 0.16</button>
+              <button type="button" class="btn sm" data-pga="0.24" title="Greek seismic zone II">Zone II 0.24</button>
+              <button type="button" class="btn sm" data-pga="0.36" title="Greek seismic zone III">Zone III 0.36</button>
+            </div>
+            <p class="hint" id="QP-h"></p>
+          </div>
+          <div class="ctl">
+            <label for="QF-n">Which floor <small id="QF-v"></small></label>
+            <div class="ctl-line"><input type="range" id="QF-r" min="1" max="2.5" step="0.05" aria-label="Building amplification slider"><span class="field"><input type="number" id="QF-n" min="1" max="4" step="0.05" inputmode="decimal"><span class="u">×</span></span></div>
+            <div class="dirbtns" style="margin-top:8px">
+              <button type="button" class="btn sm" data-qf="1">Ground floor</button>
+              <button type="button" class="btn sm" data-qf="1.75">Middle</button>
+              <button type="button" class="btn sm" data-qf="2.5">Top floor</button>
+            </div>
+          </div>
+          <div class="ctl">
+            <label for="QD-n">Shaking lasts</label>
+            <div class="ctl-line"><input type="range" id="QD-r" min="4" max="30" step="1" aria-label="Shaking duration slider"><span class="field"><input type="number" id="QD-n" min="3" max="60" step="1" inputmode="numeric"><span class="u">s</span></span></div>
+          </div>
+        </div>
+        <div id="caseNotional" hidden>
+          <div class="ctl">
+            <label for="NP-n">Sideways load <small>share of the weight</small></label>
+            <div class="ctl-line"><input type="range" id="NP-r" min="0.5" max="10" step="0.1" aria-label="Notional load slider"><span class="field"><input type="number" id="NP-n" min="0.1" max="30" step="0.1" inputmode="decimal"><span class="u">%</span></span></div>
+            <p class="hint" id="NP-h"></p>
+          </div>
+        </div>
         <div id="windOutdoor" hidden>
+          <div class="ctl">
+            <label for="BF-n">Beaufort <small id="BF-v"></small></label>
+            <div class="ctl-line"><input type="range" id="BF-r" min="0" max="12" step="1" aria-label="Beaufort force slider"><span class="field"><input type="number" id="BF-n" min="0" max="12" step="1" inputmode="numeric"><span class="u">Bft</span></span></div>
+            <p class="hint" id="BF-h"></p>
+          </div>
           <div class="ctl">
             <label for="V-n">Wind speed <small id="V-v"></small></label>
             <div class="ctl-line"><input type="range" id="V-r" min="0" max="40" step="0.5" aria-label="Wind speed slider"><span class="field"><input type="number" id="V-n" min="0" max="60" step="0.5" inputmode="decimal"><span class="u">m/s</span></span></div>
@@ -570,7 +702,7 @@ details.tv>summary:hover{color:var(--ink)}
             <div class="ctl-line"><input type="range" id="FA-r" min="0" max="359" step="1" aria-label="Screen facing direction slider"><span class="field"><input type="number" id="FA-n" min="0" max="359" step="1" inputmode="numeric"><span class="u">°</span></span></div>
           </div>
         </div>
-        <div class="ctl">
+        <div class="ctl" id="ctlDir">
           <label for="DIR-n">Direction <small id="DIR-v"></small></label>
           <div class="ctl-line"><input type="range" id="DIR-r" min="0" max="359" step="1" aria-label="Wind direction slider"><span class="field"><input type="number" id="DIR-n" min="0" max="359" step="1" inputmode="numeric"><span class="u">°</span></span></div>
           <div class="dirbtns" style="margin-top:8px">
@@ -666,7 +798,7 @@ details.tv>summary:hover{color:var(--ink)}
         </details>
       </figure>
       <figure class="fig">
-        <figcaption>Wind direction <span class="sub">drag the arrow</span></figcaption>
+        <figcaption><span id="planCap">Wind direction</span> <span class="sub" id="planSub">drag the arrow</span></figcaption>
         <canvas id="plan" role="img" aria-label="Plan view of the wall, its stage and straps, with a wind direction dial"></canvas>
         <div class="foot"><span id="planInfo"></span></div>
       </figure>
@@ -685,8 +817,14 @@ details.tv>summary:hover{color:var(--ink)}
         <p class="vtext" id="vText" aria-live="polite"></p>
       </section>
 
+      <section class="sec" id="cmpSec" hidden>
+        <h2>Indoor loads compared <span class="sub">on your ballast</span></h2>
+        <div class="tablewrap" style="max-height:none;border-top:0"><table class="data cmp" id="cmpTable"><thead><tr><th>Load</th><th>Safety factor</th><th>Needs kg/base</th></tr></thead><tbody id="cmpRows"></tbody></table></div>
+        <p class="hint" id="cmpHint"></p>
+      </section>
+
       <section class="sec">
-        <h2>Ballast and wind limits</h2>
+        <h2 id="limH">Ballast and wind limits</h2>
         <div class="tiles">
           <div class="tile"><div class="k">Needed per base</div><div class="v" id="tNeedPer">9.06<small>kg</small></div><div class="s" id="tNeedTot"></div></div>
           <div class="tile"><div class="k">You have per base</div><div class="v" id="tYourPer">9.06<small>kg</small></div><div class="s" id="tYourTot"></div></div>
@@ -714,7 +852,7 @@ details.tv>summary:hover{color:var(--ink)}
 
       <section class="sec">
         <h2>Moment balance <span class="sub">about the tipping toe, kg·m</span></h2>
-        <div class="mom-row"><span class="k">Wind × safety factor</span><span></span><span class="v" id="mWind">0</span></div>
+        <div class="mom-row"><span class="k" id="momK">Wind × safety factor</span><span></span><span class="v" id="mWind">0</span></div>
         <div class="mom" id="momWind"></div>
         <div class="mom-row"><span class="k">Resisting</span><span></span><span class="v" id="mRest">0</span></div>
         <div class="mom" id="momRest"></div>
@@ -729,7 +867,7 @@ details.tv>summary:hover{color:var(--ink)}
       </section>
 
       <section class="sec">
-        <h2>Stability map <span class="sub">ballast per base against wind</span></h2>
+        <h2>Stability map <span class="sub" id="mapSub">ballast per base against wind</span></h2>
         <div class="mapwrap" id="mapWrap">
           <canvas id="map" role="img" aria-label="Chart of required ballast per base against wind speed, with your setup marked"></canvas>
           <div class="tip" id="mapTip" hidden></div>
@@ -740,7 +878,7 @@ details.tv>summary:hover{color:var(--ink)}
           <span><b class="mono" style="color:var(--ink)">●</b> Your setup</span>
         </div>
         <details class="tv" style="margin:10px -16px -14px"><summary>Table view</summary>
-          <div class="tablewrap"><table class="data"><thead><tr><th>Wind (m/s)</th><th>Scale</th><th>Needed (kg/base)</th><th>Tips below (kg/base)</th></tr></thead><tbody id="mapRows"></tbody></table></div>
+          <div class="tablewrap"><table class="data"><thead><tr><th id="mapTh1">Wind (m/s)</th><th id="mapTh2">Beaufort</th><th>Needed (kg/base)</th><th>Tips below (kg/base)</th></tr></thead><tbody id="mapRows"></tbody></table></div>
         </details>
       </section>
     </aside>
@@ -764,12 +902,18 @@ details.tv>summary:hover{color:var(--ink)}
     <b>How it works.</b> The wind pushes on the whole screen at half its height plus 0.1 m. The screen, the back frame and the ballast try to hold it down about the toe of the base.
     Following the sheet: <code>wind force × arm × safety factor = screen + frame + ballast moments</code>.
     With wind from the rear the toe is under the screen (screen arm 0, frame arm 0.46 m, ballast arm 0.862 m). With wind from the front the toe is at the rear of the base (screen arm 0.922 m, frame and ballast 0.46 m).
-    Wind pressure is ½·1.25·v² (the sheet's table). Angled wind counts by cos θ. Outdoors, gusts raise the design wind to the peak speed, and the animation replays them.
+    Wind pressure is ½·1.25·v² (the sheet's table). The sheet's wind scale is the Beaufort scale, and picking a Beaufort force here uses the top of its speed range (force 6 is 13.8 m/s). Angled wind counts by cos θ. Outdoors, gusts raise the design wind to the peak speed, and the animation replays them.
+    <b>Indoors, wind is not the real load.</b> Air in a hall hardly moves, so the sheet's wind scale really stands in for sideways loads nobody has measured: a draught, a bump, a wobbling floor. Here you can pick them one by one.
+    A <i>door gust</i> is air at your speed for a few seconds. A <i>knock</i> is a push at one height shared by a few bases (the ergonomic limit for a whole-body push is about 23 kgf, and a braced person can reach about 70 kgf; CCOHS).
+    <i>Stage sway</i> moves the deck back and forth by a few millimetres, so every mass feels the acceleration (2π·f)²·amplitude. An <i>earthquake</i> shakes the ground; the Greek seismic zones design for 0.16, 0.24 and 0.36 g (Greek National Annex to Eurocode 8), and a rigid object on an upper floor feels up to 2.5 times the ground (EN 1998-1, 4.3.5).
+    The <i>code minimum</i> is the sideways load that temporary-works rules such as BS 5975 ask for when nothing else is known: 2.5% of the vertical load, a stand-in for out-of-plumb and rough handling.
+    For shaking the force on each mass is its weight times the acceleration, so the ballast itself is shaken too, and the wall can tip either way: the screen side is the weak one, because the screen's weight sits at the front toe. With "Auto" the ballast goes where it helps most: at the rear end for a forward tip, in the middle when the load can come from both sides.
+    The safety factor is the ratio of the tipping acceleration (or push, or gust) to yours, as in the sheet. It treats the load as steady, so it is cautious for short loads: the animation also lets the wall rock, and a brief gust or push that lifts the wall can leave it standing. A sudden load on a strapped wall can double the strap's pull, which the static number does not show.
     <b>Straps and stage.</b> A strap, cable or truss is a spring from the screen to an anchor. The wall is also a cantilever that bends, so the strap only pulls as hard as the wall moves it, plus the lift of the base. The program finds the largest wind the wall can take before a strap reaches its rated load or the wall passes its tipping point.
     On a stage it checks two ways of failing and shows the worse: the wall tipping on the deck, and the stage and wall tipping together about the stage edge.
     <b>Assumptions.</b> Straps are hand-tight with no slack: a loose strap lets the wall start to fall before it pulls and then takes a shock load, so keep them tight. Bending stiffness is illustrative (about two 50×50×3 aluminium posts 0.38 m apart per base), set it to your frame in Advanced. Ratchet straps stretch up to 7% at rated load (EN 12195-2), steel cable 0.4%, a truss 0.03%.
     Steeldeck stage decks are rated about 7.5 kN/m². Frame strength, cabinet locks, anchors and ground are not checked. Sliding is an extra check; the sheet assumes enough friction.
-    Scale 1 in the sheet's table lists 0.14 N/m² for 1.5 m/s, which should be 1.4, so 1.4 is used here.
+    Beaufort 1 in the sheet's table lists 0.14 N/m² for 1.5 m/s, which should be 1.4, so 1.4 is used here.
     Cabinet weights come from Unilumin datasheets (Uslim4 13 kg, Uslim2 7.8 kg, USlim-O3 14.8 kg, USlim-O4 32 to 34 kg) and a distributor listing (UGC 5.6 kg).
     <b>This is a rough reference.</b> As the sheet itself says, it cannot replace a structural simulation or a practical test. Use it to see how a wall reacts and to size a first guess, and have a qualified rigger or engineer approve any real installation.
   </p>
@@ -810,6 +954,17 @@ details.tv>summary:hover{color:var(--ink)}
   const BFT_UPPER = [0.2, 1.5, 3.3, 5.4, 7.9, 10.7, 13.8, 17.1, 20.7, 24.4, 28.4, 32.6];
   const BFT_NAME = ['Calm', 'Light air', 'Light breeze', 'Gentle breeze', 'Moderate breeze', 'Fresh breeze',
     'Strong breeze', 'Near gale', 'Gale', 'Strong gale', 'Storm', 'Violent storm', 'Hurricane force'];
+  // Picking a Beaufort force sets the top of its speed range, as the sheet's wind table does (force 12 has no top: 36.9 m/s ends the usual scale).
+  const BFT_SPEED = BFT_UPPER.concat([36.9]);
+  const bftRange = (n) => ({ lo: n <= 0 ? 0 : Math.round((BFT_UPPER[n - 1] + 0.1) * 10) / 10, hi: n >= 12 ? null : BFT_UPPER[n] });
+
+  // Indoor load cases. 'wind' pushes on the whole screen like moving air, 'force' is a push at one height,
+  // 'accel' is the floor or deck moving under the wall (every mass feels an inertia force, up and down too).
+  const CASES = ['draught', 'door', 'knock', 'sway', 'quake', 'notional'];
+  const CASE_KIND = { draught: 'wind', door: 'wind', knock: 'force', sway: 'accel', quake: 'accel', notional: 'accel' };
+  const CASE_NAME = { draught: 'Draught', door: 'Door gust', knock: 'Knock or push', sway: 'Stage sway', quake: 'Earthquake', notional: 'Code minimum' };
+  // Design ground acceleration of the three Greek seismic zones (Greek National Annex to Eurocode 8).
+  const QUAKE_ZONES = [{ zone: 'I', g: 0.16 }, { zone: 'II', g: 0.24 }, { zone: 'III', g: 0.36 }];
 
   // Cabinets, by module size. Weight per cabinet and depth are the manufacturer datasheet values (see notes); kg/m2 = kg / area.
   const CABINETS = [
@@ -846,6 +1001,12 @@ details.tv>summary:hover{color:var(--ink)}
       N: 14, autoN: true,
       ballastAuto: true, ballastPer: 9, ballast: null, ballastPos: 'auto',
       indoorScale: 2, outSpeed: 8, gust: 0.3, facing: 180, windDir: 0, profile: 'uniform',
+      indoorCase: 'draught',
+      door: { v: 5.4, dur: 2 },                                   // m/s at the screen, seconds
+      knock: { kgf: 25, h: 1.2, from: 'both', dur: 0.3, share: 2 }, // kgf, metres above the base, 'front' | 'rear' | 'both', seconds, bases that share it
+      sway: { amp: 5, f: 1.5, bounce: 0 },                        // mm, Hz, up-and-down shake as a fraction of g
+      quake: { pga: 0.24, floor: 1, dur: 12 },                    // ground acceleration in g, building amplification, seconds
+      notional: { pct: 2.5 },                                     // % of the weight, sideways
       Cf: 1.0, depth: SHEET.depth, mu: 0.5,
       frame: { perRow: SHEET.frame.perRow, perBase: SHEET.frame.perBase, perW: SHEET.frame.perW },
       EI: 2.9e6, gaRatio: 0.12, defLimit: 150,
@@ -862,7 +1023,9 @@ details.tv>summary:hover{color:var(--ink)}
 
   function windInfo(S) {
     let vMean, qMean, pk;
-    if (S.mode === 'indoor') {
+    if (S.mode === 'indoor' && S.indoorCase === 'door') {
+      vMean = S.door.v; qMean = RHO_FACTOR * vMean * vMean; pk = 1;
+    } else if (S.mode === 'indoor') {
       const row = SCALE[clamp(Math.round(S.indoorScale), 0, SCALE.length - 1)];
       vMean = row.v; qMean = row.q; pk = 1;
     } else {
@@ -875,9 +1038,12 @@ details.tv>summary:hover{color:var(--ink)}
      sys = { comps:[{m,xi,eta,Ig}], F (N), hc (m), xiw (m), strap|null }
      Returns the load factor lambda at which the moments balance for each rotation phi, and the best one. */
   function momentsAt(sys, phi) {
-    const c = Math.cos(phi), s = Math.sin(phi);
-    let Mr = 0; for (const k of sys.comps) Mr += k.m * G * (k.xi * c - k.eta * s);
-    return { c, s, Mr, M1: sys.F * c * (sys.hc * c + sys.xiw * s) };
+    // sys.acc: the floor accelerates sideways by acc, so every mass m gets a force m*acc at its own height; sys.gs scales the weights
+    // (a floor dropping away makes the wall lighter, one pushing up makes it heavier).
+    const c = Math.cos(phi), s = Math.sin(phi), gs = sys.gs === undefined ? 1 : sys.gs;
+    let Mr = 0, Ti = 0;
+    for (const k of sys.comps) { Mr += k.m * G * (k.xi * c - k.eta * s); Ti += k.m * (k.eta * c + k.xi * s); }
+    return { c, s, Mr: Mr * gs, M1: sys.acc ? sys.acc * Ti : sys.F * c * (sys.hc * c + sys.xiw * s) };
   }
   function strapGamma(st, c, s) {            // moment arm of the horizontal strap force about the toe (vertical component included)
     return (st.aPiv * c + st.xiAtt * s) + st.sgnV * st.tanb * (st.xiAtt * c - st.aPiv * s);
@@ -942,8 +1108,8 @@ details.tv>summary:hover{color:var(--ink)}
     return out;
   }
 
-  /* Everything the UI needs, from the raw inputs. */
-  function derive(S) {
+  /* Everything the UI needs, from the raw inputs. `ld` is an indoor load other than wind (see loadFor); null means the sheet's wind. */
+  function deriveOne(S, ld) {
     const cabH = cabHeight(S.cabSize);
     const cols = Math.round(S.W / CAB.w), rows = Math.max(1, Math.round(S.H / cabH));
     const A = S.W * S.H, N = Math.max(1, Math.round(S.N));
@@ -952,9 +1118,10 @@ details.tv>summary:hover{color:var(--ink)}
     const Wf = fr.perRow * S.H * N + fr.perBase * N + fr.perW * S.W;
 
     const wind = windInfo(S);
-    const th = S.windDir * Math.PI / 180, cosT = Math.cos(th), cn = Math.abs(cosT);
+    const th = S.windDir * Math.PI / 180, cosT = ld ? (ld.dir === 'front' ? -1 : 1) : Math.cos(th), cn = ld ? 1 : Math.abs(cosT);
     const dir = cosT >= 0 ? 'rear' : 'front';
-    wind.cn = cn; wind.dir = dir; wind.sinT = Math.sin(th);
+    wind.cn = cn; wind.dir = dir; wind.sinT = ld ? 0 : Math.sin(th);
+    const accel = !!(ld && ld.kind === 'accel'), pushed = !!(ld && ld.kind === 'force');
     wind.bft = beaufort(wind.vPeak); wind.bftName = BFT_NAME[wind.bft]; wind.bftMean = beaufort(wind.vMean);
 
     const stg = S.stage && S.stage.on ? S.stage : null;
@@ -964,7 +1131,7 @@ details.tv>summary:hover{color:var(--ink)}
 
     // --- base geometry (wall on its deck)
     const dd = S.depth - SHEET.depth;
-    const pos = S.ballastPos === 'auto' ? (dir === 'rear' ? 'rear' : 'mid') : S.ballastPos;
+    const pos = S.ballastPos === 'auto' ? ((ld && ld.pos) || (dir === 'rear' ? 'rear' : 'mid')) : S.ballastPos;   // the sheet puts the ballast mid-base for front wind
     const Lrear = pos === 'rear' ? S.depth - (SHEET.depth - SHEET.ballastRear) : SHEET.ballastMid + dd / 2;
     const Lfront = pos === 'rear' ? SHEET.depth - SHEET.ballastRear : SHEET.ballastMid + dd / 2;
     const aF = dir === 'rear' ? SHEET.frameArm : SHEET.frameArm + dd;
@@ -978,12 +1145,19 @@ details.tv>summary:hover{color:var(--ink)}
     const psi = (zAbs) => (alpha ? Math.pow(Math.max(zAbs, 3) / 10, 2 * alpha) : 1);
     const NS = 24, dz = S.H / NS, zs = new Array(NS), line = new Array(NS);
     let F = 0, M1 = 0;
+    const pBase = accel ? ld.acc * (Ws + Wf) / A : wind.qPeak * cn * S.Cf;      // N/m2; for shaking, the inertia of the screen and frame spread over the face
     for (let j = 0; j < NS; j++) {
-      const z = y0 + (j + 0.5) * dz, p = wind.qPeak * cn * S.Cf * psi(hs + z);
+      const z = y0 + (j + 0.5) * dz, p = pBase * psi(hs + z);
       zs[j] = z; line[j] = p * S.W; F += p * S.W * dz; M1 += p * S.W * dz * z;
     }
     let hc = F > 0 ? M1 / F : hW;
-    if (!alpha) { F = A * wind.qPeak * cn * S.Cf; hc = hW; }
+    if (!alpha) { F = A * pBase; hc = hW; }
+    if (pushed) {            // a push at one height; the bases that share it stand in for the whole wall, so scale the push up to the wall
+      const Feq = ld.P * N / Math.min(N, Math.max(1, Math.round(ld.share || 1)));
+      const hk = clamp(ld.h, y0 + 0.05, L), jh = clamp(Math.floor((hk - y0) / dz), 0, NS - 1);
+      for (let j = 0; j < NS; j++) line[j] = 0;
+      zs[jh] = hk; line[jh] = Feq / dz; F = Feq; hc = hk;
+    }
     const Fkgf = F / G, FkgfMean = F / G * (wind.qMean / (wind.qPeak || 1));
     const Mw = Fkgf * hc;                                   // kg*m about the toe, peak, unfactored
 
@@ -1044,44 +1218,46 @@ details.tv>summary:hover{color:var(--ink)}
       { m: Ws, xi: aS, eta: y0 + S.H / 2, Ig: Ws * S.H * S.H / 12 },
       { m: Wf, xi: aF, eta: y0 + S.H / 2, Ig: Wf * S.H * S.H / 12 },
       { m: B, xi: aB, eta: y0 + 0.12, Ig: 0 }];
-    const sysW = (B) => ({ kind: 'W', comps: compsW(B), F, hc, xiw: aS, strap: strapFor('W', aS) });
+    const inert = accel ? { acc: ld.acc, gs: ld.gs } : null;           // shaking: inertia of every mass, and a lighter or heavier wall
+    const useS = !!stg && !(ld && ld.systems && ld.systems.S === false);   // deck sway moves the deck under the wall, not the stage on the floor
+    const sysW = (B) => Object.assign({ kind: 'W', comps: compsW(B), F, hc, xiw: aS, strap: strapFor('W', aS) }, inert);
     const sysS = (B) => {
       const c = compsW(B).map((k) => ({ m: k.m, xi: k.xi + xi0, eta: k.eta + hs, Ig: k.Ig }));
       c.push({ m: stageMass, xi: stg.depth / 2, eta: 0.55 * hs, Ig: stageMass * (stg.depth * stg.depth + hs * hs) / 12 });
-      return { kind: 'S', comps: c, F, hc: hs + hc, xiw: xiScreenS, strap: strapFor('S', xiScreenS) };
+      return Object.assign({ kind: 'S', comps: c, F, hc: hs + hc, xiw: xiScreenS, strap: strapFor('S', xiScreenS) }, inert);
     };
     const lamOf = (B) => {
-      const w = scanSys(sysW(B)), s = stg ? scanSys(sysS(B)) : null;
+      const w = scanSys(sysW(B)), s = useS ? scanSys(sysS(B)) : null;
       const lamW = Math.min(w.lamMax, SF_CAP * 10), lamS = s ? Math.min(s.lamMax, SF_CAP * 10) : Infinity;
       return { lamW, lamS, lam: Math.min(lamW, lamS), gov: lamS < lamW ? 'S' : 'W' };
     };
 
     // --- required ballast: closed form without straps (sheet formula), bisection with straps
-    let reqTotalRaw, reqTotal;
-    const hasStrap = !!(strapFor('W', aS) || (stg && strapFor('S', xiScreenS)));
+    let reqTotalRaw, reqTotal, capHit = false;
+    const hasStrap = !!(strapFor('W', aS) || (useS && strapFor('S', xiScreenS)));
     const reqClosed = (kind) => {
       const sys = kind === 'W' ? sysW(0) : sysS(0);
       const bl = kind === 'W' ? aB : aB + xi0;
       let Mr0 = 0; for (const k of sys.comps) Mr0 += k.m * k.xi;
       return (S.SF * Fkgf * sys.hc - Mr0) / bl;
     };
-    if (!hasStrap) {
+    if (!hasStrap && !accel) {                                   // the load does not depend on the ballast: closed form, as in the sheet
       reqTotalRaw = reqClosed('W');
-      if (stg) reqTotalRaw = Math.max(reqTotalRaw, reqClosed('S'));
+      if (useS) reqTotalRaw = Math.max(reqTotalRaw, reqClosed('S'));
       reqTotal = Math.max(0, reqTotalRaw);
-    } else {
+    } else {                                                     // straps, or shaking (the ballast itself adds inertia): bisection
       const ok = (B) => lamOf(B).lam >= S.SF - 1e-9;
       if (ok(0)) { reqTotal = 0; reqTotalRaw = 0; }
       else {
         let lo = 0, hi = MAX_BALLAST * N;
-        if (!ok(hi)) { reqTotal = hi; } else { for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (ok(mid)) hi = mid; else lo = mid; } reqTotal = hi; }
+        if (!ok(hi)) { reqTotal = hi; capHit = true; } else { for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (ok(mid)) hi = mid; else lo = mid; } reqTotal = hi; }
         reqTotalRaw = reqTotal;
       }
     }
     const reqPer = reqTotal / N;
 
     let ballast;
-    if (S.ballastAuto) ballast = new Array(N).fill(Math.min(reqPer, MAX_BALLAST));
+    if (S.ballastAuto) ballast = new Array(N).fill(ld && ld.ballastPer != null ? ld.ballastPer : Math.min(reqPer, MAX_BALLAST));
     else ballast = Array.from({ length: N }, (_, i) => (S.ballast && S.ballast[i] != null ? S.ballast[i] : S.ballastPer));
     const Wb = sum(ballast);
 
@@ -1097,10 +1273,13 @@ details.tv>summary:hover{color:var(--ink)}
     // --- moments (kg*m) about the governing pivot, at the check state
     const stC = eqC || { phi: scanG.phiAtMax, Ph: 0 };
     const cC = Math.cos(stC.phi), sC = Math.sin(stC.phi);
-    const part = (k) => k.m * (k.xi * cC - k.eta * sC);
+    const gsG = sysG.gs === undefined ? 1 : sysG.gs;
+    const part = (k) => k.m * (k.xi * cC - k.eta * sC) * gsG;
     const Mpart = { s: part(sysG.comps[0]), f: part(sysG.comps[1]), b: part(sysG.comps[2]), stage: stg && gov === 'S' ? part(sysG.comps[3]) : 0, strap: 0 };
     if (sysG.strap) Mpart.strap = stC.Ph * strapGamma(sysG.strap, cC, sC) / G;
-    const MwG = (gov === 'S' ? hs + hc : hc) * Fkgf;
+    const Fdisp = sysG.acc ? sysG.acc * sum(sysG.comps.map((k) => k.m)) : F;           // N: the push, or the inertia of everything that moves
+    const TiG = sysG.acc ? sysG.comps.reduce((t, k) => t + k.m * (k.eta * cC + k.xi * sC), 0) : 0;
+    const MwG = sysG.acc ? sysG.acc * TiG / G : (gov === 'S' ? hs + hc : hc) * Fkgf;
     const M = { w: MwG, wSF: S.SF * MwG, s: Mpart.s, f: Mpart.f, b: Mpart.b, stage: Mpart.stage, strap: Mpart.strap, rest: Mpart.s + Mpart.f + Mpart.b + Mpart.stage + Mpart.strap, gov };
     const aBgov = gov === 'S' ? aB + xi0 : aB;
     const MwShare = MwG / N, base0 = (M.rest - M.b) / N;
@@ -1109,6 +1288,14 @@ details.tv>summary:hover{color:var(--ink)}
     // --- limits (peak wind speed scales as sqrt(load factor))
     const vCritPeak = isFinite(SFact) && F > 0 ? wind.vPeak * Math.sqrt(SFact) : Infinity;
     const vAllowPeak = isFinite(SFact) && F > 0 ? wind.vPeak * Math.sqrt(SFact / S.SF) : Infinity;
+    const limits = { vCritPeak, vAllowPeak, vCritMean: vCritPeak / wind.pk, vAllowMean: vAllowPeak / wind.pk, kind: accel ? 'accel' : pushed ? 'force' : 'speed' };
+    if (accel) {                                  // in g, at the wall's base: the load grows in step with the safety factor
+      const a0 = ld.acc / G;
+      limits.crit = isFinite(SFact) ? SFact * a0 : Infinity; limits.allow = isFinite(SFact) ? SFact / S.SF * a0 : Infinity;
+    } else if (pushed) {                          // in kgf, at the height of the push
+      const P0 = ld.P / G;
+      limits.crit = isFinite(SFact) ? SFact * P0 : Infinity; limits.allow = isFinite(SFact) ? SFact / S.SF * P0 : Infinity;
+    }
 
     // --- elastic response at the nominal peak wind
     const eq = eq1 || { phi: scanG.phiAtMax, Ph: 0, none: true };
@@ -1140,7 +1327,7 @@ details.tv>summary:hover{color:var(--ink)}
     } : null;
 
     // --- sliding and deck checks
-    const FN = F, Wwall = (Ws + Wf + Wb) * G;
+    const FN = Fdisp, Wwall = (Ws + Wf + Wb) * G;
     const muW = stg ? stg.muDeck : S.mu;
     const PhFloor = strapOut && strapOut.active && (sb.to === 'floor' || !stg) ? Phn : 0;
     const slide = { cap: muW * Wwall + (stg ? 0 : PhFloor), F: FN, SF: FN > 1e-9 ? (muW * Wwall + (stg ? 0 : PhFloor)) / FN : Infinity, mu: muW };
@@ -1155,44 +1342,157 @@ details.tv>summary:hover{color:var(--ink)}
     }
 
     const pivotX = gov === 'S' ? (dir === 'rear' ? stg.front : -(stg.depth - stg.front)) : (dir === 'rear' ? 0 : -S.depth);
-    const rig = {
-      m: sysG.comps.map((k) => k.m), x: sysG.comps.map((k) => k.xi), y: sysG.comps.map((k) => k.eta), Ig: sysG.comps.map((k) => k.Ig),
-      F, hc: sysG.hc, xiw: sysG.xiw, strap: sysG.strap, gov, hs, tipDir,
-      bendStrap: intStrap ? { c0: sb.c0, dp1: sb.dp1a, gp: sb.gp, PhCap: sb.PhCap } : null
+    const buildRig = (sys) => {               // everything the rocking simulation needs about one failure system (wall on deck, or stage and wall)
+      const internal = !!(sb && sideActive && !sys.strap && sys.kind === 'S' && sb.to !== 'floor');
+      const r = {
+        m: sys.comps.map((k) => k.m), x: sys.comps.map((k) => k.xi), y: sys.comps.map((k) => k.eta), Ig: sys.comps.map((k) => k.Ig),
+        F, hc: sys.hc, xiw: sys.xiw, strap: sys.strap, gov: sys.kind, hs, tipDir,
+        bendStrap: internal ? { c0: sb.c0, dp1: sb.dp1a, gp: sb.gp, PhCap: sb.PhCap } : null,
+        acc: sys.acc || 0, gs: sys.gs === undefined ? 1 : sys.gs
+      };
+      r.I = 0; let mx = 0, my = 0;
+      for (let i = 0; i < r.m.length; i++) {
+        r.I += r.m[i] * (r.x[i] * r.x[i] + r.y[i] * r.y[i]) + r.Ig[i];
+        mx += r.m[i] * r.x[i]; my += r.m[i] * r.y[i];
+      }
+      const Mtot = sum(r.m);
+      r.phiCrit = Math.atan2(mx, my); r.xcg = mx / Mtot; r.ycg = my / Mtot;
+      return r;
     };
-    rig.I = 0; let mx = 0, my = 0;
-    for (let i = 0; i < rig.m.length; i++) {
-      rig.I += rig.m[i] * (rig.x[i] * rig.x[i] + rig.y[i] * rig.y[i]) + rig.Ig[i];
-      mx += rig.m[i] * rig.x[i]; my += rig.m[i] * rig.y[i];
-    }
-    const Mtot = sum(rig.m);
-    rig.phiCrit = Math.atan2(mx, my); rig.xcg = mx / Mtot; rig.ycg = my / Mtot;
+    const rig = buildRig(sysG);
+    const rigs = { W: gov === 'W' ? rig : buildRig(sysW(Wb)), S: !useS ? null : (gov === 'S' ? rig : buildRig(sysS(Wb))) };
 
     // hypothetical ballast -> safety factor (chart, hover tips, other tools)
     const sfOf = (Btot) => Math.min(lamOf(Btot).lam, 1e9);
-    const reqPerAtSpeed = (v, SFt) => {                         // kg per base needed at mean wind speed v for target SFt
-      const k = Math.pow(v / (wind.vMean || 1), 2) * SFt;
+    const reqPerAtK = (k) => {                                  // kg per base so that the load factor reaches k
       const ok = (B) => lamOf(B).lam >= k - 1e-9;
       if (ok(0)) return 0;
       let lo = 0, hi = MAX_BALLAST * N; if (!ok(hi)) return hi / N;
       for (let i = 0; i < 34; i++) { const mid = (lo + hi) / 2; if (ok(mid)) hi = mid; else lo = mid; }
       return hi / N;
     };
+    const reqPerAtSpeed = (v, SFt) => reqPerAtK(Math.pow(v / (wind.vMean || 1), 2) * SFt);    // at mean wind speed v for target SFt
+    const reqPerAtLoad = (x, SFt, x0) => reqPerAtK((x / (x0 || 1)) * SFt);                   // loads that grow in step with x (a push, a shake)
 
     return {
       cols, rows, A, N, Ws, Wf, Wb, wind, dir, pos, cabH,
       spacing: S.W / N, sheetN: sheetBases(S), spacingOK: S.W / N <= 1 + 1e-9,
       geom: { aS, aF, aB, hW, hc, ballastX, depth: S.depth, y0, L, hs, pivotX },
-      F: { kgf: Fkgf, kgfMean: FkgfMean, N: F },
+      F: { kgf: Fdisp / G, kgfMean: accel || pushed ? Fdisp / G : FkgfMean, N: Fdisp },
       M, Mpart,
-      req: { totalRaw: reqTotalRaw, total: reqTotal, per: reqPer, perRaw: reqTotalRaw / N, none: reqTotal <= 1e-9 && reqTotalRaw <= 0 || (hasStrap && reqTotal <= 1e-9), capped: reqPer > MAX_BALLAST },
+      req: { totalRaw: reqTotalRaw, total: reqTotal, per: reqPer, perRaw: reqTotalRaw / N, none: reqTotal <= 1e-9 && reqTotalRaw <= 0 || ((hasStrap || accel) && reqTotal <= 1e-9), capped: capHit || reqPer > MAX_BALLAST },
       ballast, SFact, status, lam: lm,
-      limits: { vCritPeak, vAllowPeak, vCritMean: vCritPeak / wind.pk, vAllowMean: vAllowPeak / wind.pk },
+      limits,
       slide, slideStage, deck, stage, strap: strapOut, bend, lean, eq: { phi, Ph: Phn, none: !!eq.none, capped: scanG.capped },
-      local, rig, gov, sfOf, reqPerAtSpeed, profileAlpha: alpha,
+      local, rig, rigs, gov, sfOf, reqPerAtSpeed, reqPerAtLoad, profileAlpha: alpha,
+      loadKind: accel ? 'accel' : pushed ? 'force' : 'wind',
       sys: { W: sysW, S: stg ? sysS : null }
     };
   }
+
+  /* The load of one indoor case, pushing one way. 'rear' tips the wall forward about the front toe (the sheet's rear wind),
+     'front' tips it backward about the rear toe. */
+  function loadFor(S, cs, dir) {
+    const base = { cs, dir, systems: { W: true, S: true } };
+    if (cs === 'knock') {
+      const k = S.knock;
+      return Object.assign(base, { kind: 'force', P: Math.max(0, k.kgf) * G, h: k.h, share: k.share });
+    }
+    if (cs === 'sway') {                                  // the deck moves by +-amp at f Hz: peak acceleration (2 pi f)^2 * amp; the bounce makes the wall lighter at the peaks
+      const w = 2 * Math.PI * Math.max(0.05, S.sway.f), a = w * w * Math.max(0, S.sway.amp) / 1000;
+      return Object.assign(base, { kind: 'accel', acc: a, gs: Math.max(0.05, 1 - Math.max(0, S.sway.bounce)), systems: { W: true, S: false } });
+    }
+    if (cs === 'quake') {                                 // ground acceleration times the building's amplification, with a vertical shake of half that
+      const a = Math.max(0, S.quake.pga) * Math.max(0.1, S.quake.floor);
+      return Object.assign(base, { kind: 'accel', acc: a * G, gs: Math.max(0.05, 1 - 0.5 * a) });
+    }
+    return Object.assign(base, { kind: 'accel', acc: Math.max(0, S.notional.pct) / 100 * G, gs: 1 });     // a notional sideways load as a share of the weight
+  }
+
+  /* Everything the UI needs for the selected load case. Shaking, and a push from either side, are checked both ways and the weaker way is reported. */
+  function derive(S) {
+    const cs = S.mode === 'indoor' ? (S.indoorCase || 'draught') : 'outdoor';
+    const kind = CASE_KIND[cs] || 'wind';
+    if (kind === 'wind') { const D = deriveOne(S, null); D.loadCase = cs; return D; }
+    const from = cs === 'knock' ? S.knock.from : 'both';
+    if (from === 'front' || from === 'rear') { const D = deriveOne(S, loadFor(S, cs, from)); D.loadCase = cs; return D; }
+    // Where the ballast sits matters when the load can come from either side: at the rear end it does nothing against a backward tip, in the
+    // middle it works both ways. With "Auto" try both and keep the one that needs less ballast (a layout that cannot reach the margin at all loses).
+    const attempt = (pos) => {
+      const ldR = loadFor(S, cs, 'rear'), ldF = loadFor(S, cs, 'front'); ldR.pos = ldF.pos = pos;
+      let dR = deriveOne(S, ldR), dF = deriveOne(S, ldF);
+      const reqR = dR.req, reqF = dF.req, per = Math.max(reqR.per, reqF.per);
+      if (S.ballastAuto) { ldR.ballastPer = ldF.ballastPer = Math.min(per, MAX_BALLAST); dR = deriveOne(S, ldR); dF = deriveOne(S, ldF); }
+      return { dR, dF, reqR, reqF, per, sf: Math.min(dR.SFact, dF.SFact), capped: reqR.capped || reqF.capped, pos };
+    };
+    let best = attempt(S.ballastPos === 'auto' ? 'rear' : S.ballastPos);
+    if (S.ballastPos === 'auto') {
+      const alt = attempt('mid');
+      const better = alt.capped === best.capped ? alt.per < best.per - 1e-9 : best.capped;
+      if (better) best = alt;
+    }
+    const { dR, dF, reqR, reqF, per } = best;
+    const D = dR.SFact <= dF.SFact ? dR : dF;
+    D.loadCase = cs; D.both = true; D.sides = { fwd: dR, back: dF }; D.posUsed = best.pos;
+    D.shake = { fwd: dR.rigs[D.gov] || dR.rig, back: dF.rigs[D.gov] || dF.rig };       // the rocking simulation tips either way
+    const sfR = dR.sfOf, sfF = dF.sfOf, rqR = dR.reqPerAtLoad, rqF = dF.reqPerAtLoad;      // (D is one of the two, so keep their own functions before replacing)
+    D.sfOf = (Btot) => Math.min(sfR(Btot), sfF(Btot));                                    // charts and tables use the weaker way at every ballast
+    D.reqPerAtLoad = (x, SFt, x0) => Math.max(rqR(x, SFt, x0), rqF(x, SFt, x0));
+    D.req = Object.assign({}, D.req, { per, total: per * D.N, perRaw: Math.max(reqR.perRaw, reqF.perRaw), totalRaw: Math.max(reqR.totalRaw, reqF.totalRaw),
+      none: reqR.none && reqF.none, capped: reqR.capped || reqF.capped });
+    return D;
+  }
+
+  /* Every indoor case side by side, for the ballast now on the bases (cur is the derive() result for the selected case). */
+  function compareCases(S, cur) {
+    const bal = cur ? { ballastAuto: false, ballast: cur.ballast.slice(), ballastPer: cur.Wb / cur.N } : {};
+    return CASES.map((id) => {
+      const S2 = Object.assign({}, S, { mode: 'indoor', indoorCase: id });
+      const Dn = derive(Object.assign({}, S2, bal));                                  // the safety factor on the ballast you have
+      const Dr = cur ? derive(Object.assign({}, S2, { ballastAuto: true })) : Dn;      // the ballast each case needs, on its own
+      return { id, name: CASE_NAME[id], kind: CASE_KIND[id], SF: Dn.SFact, status: Dn.status, req: Dr.req.per, none: Dr.req.none, capped: Dr.req.capped, limits: Dn.limits, gov: Dn.gov };
+    });
+  }
+
+  /* ---- how each load changes in time: all deterministic, so a replay looks the same ---- */
+  const smoothstep = (x) => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
+  // a pulse that repeats: starts at t0, rises, holds, falls, then rests before the next one
+  function pulseAt(t, t0, dur, rise, fall, rest) {
+    if (t < t0) return 0;
+    const tau = (t - t0) % (dur + rest);
+    if (tau >= dur) return 0;
+    const r = Math.max(0.01, Math.min(rise, dur / 2)), f = Math.max(0.01, Math.min(fall, dur / 2));
+    return smoothstep(tau / r) * (1 - smoothstep((tau - (dur - f)) / f));
+  }
+  /* An earthquake-like record: shaking from 0.4 to 10 Hz that builds up, stays strong, then dies away. Acceleration peak = 1, and the
+     ground displacement it gives (high-passed, peak 1) for drawing. Sum of sines with fixed phases, so it never changes between runs. */
+  const REC_DT = 1 / 120, recCache = {};
+  function makeRecord(seed, dur) {
+    const key = seed + ':' + dur; if (recCache[key]) return recCache[key];
+    let x = (seed * 2654435761) >>> 0; const rnd = () => { x = (Math.imul(x, 1664525) + 1013904223) >>> 0; return x / 4294967296; };
+    const n = 28, f = [], a = [], p = [];
+    for (let k = 0; k < n; k++) {
+      const fk = 0.4 * Math.pow(25, k / (n - 1)), lo = (fk / 0.7) * (fk / 0.7), sd = lo / (1 + lo) / (1 + Math.pow(fk / 4.5, 4));
+      f.push(fk); a.push(Math.sqrt(sd * fk)); p.push(2 * Math.PI * rnd());
+    }
+    const N = Math.ceil((dur + 0.2) / REC_DT) + 1, acc = new Float32Array(N), disp = new Float32Array(N);
+    const t1 = 0.12 * dur, t2 = 0.4 * dur, c = 3 / Math.max(dur - t2, 0.5);
+    let pk = 1e-9;
+    for (let i = 0; i < N; i++) {
+      const t = i * REC_DT; let s = 0;
+      for (let k = 0; k < n; k++) s += a[k] * Math.sin(2 * Math.PI * f[k] * t + p[k]);
+      const env = t >= dur ? 0 : t < t1 ? (t / t1) * (t / t1) : t <= t2 ? 1 : Math.exp(-c * (t - t2));
+      acc[i] = s * env; pk = Math.max(pk, Math.abs(acc[i]));
+    }
+    let v = 0, xd = 0, pd = 1e-9;
+    for (let i = 0; i < N; i++) {
+      acc[i] /= pk;
+      v = v * (1 - 1.2 * REC_DT) + acc[i] * REC_DT; xd = xd * (1 - 1.2 * REC_DT) + v * REC_DT; disp[i] = xd; pd = Math.max(pd, Math.abs(xd));
+    }
+    for (let i = 0; i < N; i++) disp[i] /= pd;
+    return (recCache[key] = { acc, disp });
+  }
+  const recAt = (arr, t) => { const x = t / REC_DT, i = Math.floor(x); if (!(x >= 0) || i >= arr.length - 1) return 0; const k = x - i; return arr[i] * (1 - k) + arr[i + 1] * k; };
 
   /* Deterministic gust signal in [-1, 1] (sum of incommensurate sines). */
   function gustN(t) {
@@ -1208,15 +1508,48 @@ details.tv>summary:hover{color:var(--ink)}
     setRig(D, S) {
       this.rig = D.rig; this.gust = S.mode === 'outdoor' ? S.gust : 0;
       this.dirSign = D.dir === 'rear' ? 1 : -1; this.cn = D.wind.cn;
+      this.caseId = D.loadCase || 'draught';
+      this.shake = D.shake || null;                       // loads that can tip the wall either way: two rigs, one per toe
+      this.door = Object.assign({}, S.door); this.knock = Object.assign({}, S.knock); this.sway = Object.assign({}, S.sway); this.quake = Object.assign({}, S.quake);
+      this.pushSign = D.dir === 'rear' ? 1 : -1;
+      this.recs = this.caseId === 'quake' ? { h: makeRecord(1, S.quake.dur), v: makeRecord(7, S.quake.dur) } : null;
+      this.groundAmp = this.caseId === 'sway' ? S.sway.amp / 1000 : this.caseId === 'quake' ? 0.4 * S.quake.pga * S.quake.floor : 0;   // metres the floor really moves
+      if (!this.side) this.side = this.dirSign;
     }
-    reset() { this.t = 0; this.phi = 0; this.omega = 0; this.toppled = false; this.maxPhi = 0; this.impactAt = -1; this.lastU = 0; this.lam = 0; this.Ph = 0; this.broken = false; }
+    reset() {
+      this.t = 0; this.phi = 0; this.omega = 0; this.toppled = false; this.maxPhi = 0; this.impactAt = -1; this.lastU = 0; this.lam = 0; this.lamB = 0; this.Ph = 0; this.broken = false;
+      this.side = this.dirSign || 1;                       // +1 tilting forward about the front toe, -1 backward about the rear toe
+      this.pushDir = this.dirSign || 1;
+      this.ground = 0;                                     // how far the floor is displaced, -1..1 of its peak
+    }
     ramp(t) { const x = clamp(t / 1.5, 0, 1); return x * x * (3 - 2 * x); }
     windU(t) { const m = 1 + this.gust * gustN(t * 0.9 + 3); return this.ramp(t) * m / (1 + this.gust); }
-    step(dt) {
+    /* the load at time t: u (speed or load fraction), lam (load factor, signed when it can push either way), gs (weight factor), g (floor displacement) */
+    loadAt(t) {
+      switch (this.caseId) {
+        case 'door': { const u = pulseAt(t, 1, this.door.dur, 0.5, 0.7, 6); return { u, lam: u * u, gs: 1, g: 0 }; }
+        case 'knock': {
+          const d = this.knock.dur, u = pulseAt(t, 1, d, 0.05, 0.1, 5), n = t < 1 ? 0 : Math.floor((t - 1) / (d + 5));
+          const sgn = this.knock.from === 'rear' ? 1 : this.knock.from === 'front' ? -1 : (n % 2 === 0 ? 1 : -1);
+          return { u, lam: this.shake ? sgn * u : u, gs: 1, g: 0 };
+        }
+        case 'sway': { const r = smoothstep(t / 2), s = Math.sin(2 * Math.PI * this.sway.f * t) * r; return { u: s, lam: s, gs: 1 - this.sway.bounce * Math.abs(s), g: s }; }
+        case 'quake': {
+          const tau = t < 1 ? -1 : (t - 1) % (this.quake.dur + 6);
+          if (tau < 0) return { u: 0, lam: 0, gs: 1, g: 0 };
+          const a = recAt(this.recs.h.acc, tau), v = recAt(this.recs.v.acc, tau);
+          return { u: a, lam: a, gs: 1 + 0.5 * this.quake.pga * this.quake.floor * v, g: -recAt(this.recs.h.disp, tau) };
+        }
+        case 'notional': { const u = this.ramp(t); return { u, lam: this.pushSign * u, gs: 1, g: 0 }; }
+        default: { const u = this.windU(t); return { u, lam: u * u, gs: 1, g: 0 }; }
+      }
+    }
+    step(dt) { if (this.shake) this.stepShake(dt); else this.stepOne(dt); }
+    stepOne(dt) {                                          // wind, a door gust or a push from one side: tips one way, about one toe
       const R = this.rig; if (!R) return;
       this.t += dt;
-      const u = this.windU(this.t); this.lastU = u;
-      const lam = u * u; this.lam = lam;
+      const L = this.loadAt(this.t), u = L.u; this.lastU = u;
+      const lam = L.lam; this.lam = lam; this.lamB = lam;
       const c = Math.cos(this.phi), s = Math.sin(this.phi);
       const Tw = R.F * lam * c * (R.hc * c + R.xiw * s);
       let Tr = 0;
@@ -1247,10 +1580,52 @@ details.tv>summary:hover{color:var(--ink)}
       if (this.phi > this.maxPhi) this.maxPhi = this.phi;
       if (!this.toppled && this.phi > R.phiCrit && net > 0 && (!R.strap || this.broken || this.phi > 0.6)) this.toppled = true;
     }
+    /* Shaking, or a push from either side. The wall rests flat, or rocks about the front toe (side +1) or the rear toe (side -1). Each toe has its
+       own geometry. When it comes back to the floor the other toe lands, some energy is lost, and it goes on over to the other side if it still has the speed. */
+    stepShake(dt) {
+      this.t += dt;
+      const L = this.loadAt(this.t), lam = L.lam, gs = L.gs;
+      this.lastU = L.u; this.lam = lam; this.ground = L.g;
+      this.lamB = lam * this.dirSign;                      // the load factor along the weaker way, which is how the bending is worked out
+      if (Math.abs(lam) > 1e-3) this.pushDir = lam >= 0 ? 1 : -1;       // which way the last push went (for the picture)
+      const moment = (side, phi) => {
+        const r = side > 0 ? this.shake.fwd : this.shake.back, c = Math.cos(phi), s = Math.sin(phi), ll = side * lam;   // ll < 0: the load helps this side
+        let Tr = 0, Ti = 0;
+        for (let i = 0; i < r.m.length; i++) { Tr += r.m[i] * G * (r.x[i] * c - r.y[i] * s); Ti += r.m[i] * (r.y[i] * c + r.x[i] * s); }
+        const Tw = r.acc ? ll * r.acc * Ti : ll * r.F * c * (r.hc * c + r.xiw * s);
+        let Ph = 0, Tst = 0; const st = r.strap;
+        if (st && !this.broken) {
+          const eng = ll * st.dp1 + phi * st.aPiv - st.gp;
+          if (eng > 0) { Ph = st.c0 * eng; if (Ph > st.PhCap * 1.0000001) { this.broken = true; Ph = 0; } else Tst = Ph * strapGamma(st, c, s); }
+        }
+        return { net: Tw - gs * Tr - Tst, Ph, r };
+      };
+      if (this.phi <= 0 && this.omega === 0) {            // lying flat: does the load lift one edge?
+        const sd = lam >= 0 ? 1 : -1, m0 = moment(sd, 0);
+        if (m0.net <= 0) { this.phi = 0; this.Ph = 0; return; }
+        this.side = sd;
+      }
+      const m = moment(this.side, this.phi), r = m.r; this.Ph = m.Ph;
+      this.omega += (m.net / r.I) * dt;
+      this.omega *= (1 - 0.35 * dt);
+      this.phi += this.omega * dt;
+      if (this.phi < 0) {                                  // back down: the other toe lands
+        const w = -this.omega; this.phi = 0; this.side = -this.side;
+        this.omega = w > 0.01 ? 0.85 * w : 0;
+      }
+      const floor = Math.PI / 2;
+      if (this.phi > floor) {
+        this.phi = floor;
+        if (this.omega > 0.25 && this.impactAt < 0) this.impactAt = this.t;
+        this.omega = this.omega > 0.25 ? -this.omega * 0.18 : 0;
+      }
+      if (this.phi > this.maxPhi) this.maxPhi = this.phi;
+      if (!this.toppled && this.phi > r.phiCrit && this.omega > 0 && (!r.strap || this.broken || this.phi > 0.6)) this.toppled = true;
+    }
     liftMM(depth) { return Math.sin(this.phi) * depth * 1000; }
   }
 
-  return { G, CAB, SHEET, SCALE, CABINETS, cabArea, cabHeight, RESTRAINT, PROFILE_ALPHA, MAX_BALLAST, SF_CAP, BFT_NAME, beaufort, defaults, derive, gustN, Sim, sheetBases, clamp, windInfo, scanSys, lamAt };
+  return { G, CAB, SHEET, SCALE, CABINETS, cabArea, cabHeight, RESTRAINT, PROFILE_ALPHA, MAX_BALLAST, SF_CAP, BFT_NAME, BFT_SPEED, bftRange, CASES, CASE_KIND, CASE_NAME, QUAKE_ZONES, beaufort, defaults, derive, compareCases, loadFor, makeRecord, gustN, Sim, sheetBases, clamp, windInfo, scanSys, lamAt };
 });
 
 (function () {
@@ -1276,7 +1651,7 @@ function nf(v, d) {
   const [a, b] = s.split('.');
   return a.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (b ? '.' + b : '');
 }
-const nf0 = (v) => nf(v, 0), nf1 = (v) => nf(v, 1), nf2 = (v) => nf(v, 2);
+const nf0 = (v) => nf(v, 0), nf1 = (v) => nf(v, 1), nf2 = (v) => nf(v, 2), nf3 = (v) => nf(v, 3);
 function niceMax(v) {
   if (!(v > 0)) return 1;
   const e = Math.pow(10, Math.floor(Math.log10(v)));
@@ -1393,13 +1768,50 @@ function drawIndoor(ctx, V, env) {
     ctx.beginPath(); ctx.moveTo(x - 5, th); ctx.lineTo(x + 5, th); ctx.lineTo(x + rad * 0.62, th + rad * 1.6); ctx.lineTo(x - rad * 0.62, th + rad * 1.6); ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#d9e4f2'; ctx.fillRect(x - 5, th, 10, 3);
   }
-  // floor
+  // floor (drawn wider than the picture, because it moves when the floor shakes)
+  ctx.save(); ctx.translate(env.gx || 0, 0);
   g = ctx.createLinearGradient(0, oy, 0, h);
   g.addColorStop(0, '#28343f'); g.addColorStop(1, '#0a0e14');
-  ctx.fillStyle = g; ctx.fillRect(0, oy, w, h - oy);
-  ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.fillRect(0, oy, w, 1);
+  ctx.fillStyle = g; ctx.fillRect(-80, oy, w + 160, h - oy);
+  ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.fillRect(-80, oy, w + 160, 1);
   floorRuler(ctx, V, 'rgba(190,210,235,.55)');
-  drawFan(ctx, V, env);
+  ctx.restore();
+  if (env.kind === 'door') drawDoor(ctx, V, env);
+  else if (env.kind === 'knock') drawPerson(ctx, V, env);
+  else if (env.kind === 'draught' || env.kind === undefined) drawFan(ctx, V, env);
+}
+
+/* a door that swings open when the gust comes */
+function drawDoor(ctx, V, env) {
+  const { oy, s, w } = V, dirS = env.sign, open = clamp(env.amt, 0, 1);
+  const x = clamp(V.ox - dirS * 4.8 * s, 40, w - 40), dw = 0.95 * s, dh = Math.min(2.15 * s, oy * 0.6);
+  if (open > 0.02) {                                                      // light and air coming through
+    const lg = ctx.createLinearGradient(x, 0, x + dirS * 4.5 * s, 0);
+    lg.addColorStop(0, 'rgba(255,238,200,' + (0.22 * open).toFixed(3) + ')'); lg.addColorStop(1, 'rgba(255,238,200,0)');
+    ctx.fillStyle = lg; ctx.beginPath(); ctx.moveTo(x, oy - dh); ctx.lineTo(x + dirS * 4.5 * s, oy - dh * 0.5); ctx.lineTo(x + dirS * 4.5 * s, oy); ctx.lineTo(x, oy); ctx.closePath(); ctx.fill();
+  }
+  ctx.fillStyle = '#0a0e16'; ctx.fillRect(x - dw / 2, oy - dh, dw, dh);
+  ctx.strokeStyle = 'rgba(190,210,235,.55)'; ctx.lineWidth = 2; ctx.strokeRect(x - dw / 2, oy - dh, dw, dh);
+  const hinge = x - dirS * dw / 2, shrink = 1 - 0.8 * open;               // the leaf, seen from the side, swings away
+  ctx.fillStyle = '#3a4a5e'; ctx.beginPath();
+  ctx.moveTo(hinge, oy - dh); ctx.lineTo(hinge + dirS * dw * shrink, oy - dh + 0.05 * s * open); ctx.lineTo(hinge + dirS * dw * shrink, oy); ctx.lineTo(hinge, oy); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#8fb0d6'; ctx.beginPath(); ctx.arc(hinge + dirS * dw * shrink * 0.86, oy - dh * 0.46, 2.4, 0, TAU); ctx.fill();
+  txt(ctx, 'door', x, oy - dh - 7, { font: '600 10px ' + F.sans, align: 'center', color: 'rgba(190,210,235,.8)' });
+}
+
+/* someone pushing on the wall */
+function drawPerson(ctx, V, env) {
+  const { oy, s } = V, sg = env.pushSign || 1, amt = clamp(env.amt, 0, 1), hk = env.pushH;
+  if (hk > 2.3) return;                                                   // too high for a person to reach
+  const contactX = V.X(sg > 0 ? -0.67 : 0.05);
+  const fx = contactX - sg * (0.45 + 0.4 * (1 - amt * 0.6)) * s, lean = 0.22 * (0.35 + amt) * sg;
+  const hip = [fx + lean * 0.5 * s, oy - 0.95 * s], sh = [fx + lean * 1.2 * s, oy - 1.5 * s], head = [sh[0] + lean * 0.25 * s, oy - 1.7 * s];
+  ctx.strokeStyle = 'rgba(206,220,240,.85)'; ctx.fillStyle = 'rgba(206,220,240,.85)'; ctx.lineWidth = Math.max(2.5, 0.09 * s); ctx.lineCap = 'round';
+  line(ctx, fx - sg * 0.2 * s, oy, hip[0], hip[1]); line(ctx, fx + sg * 0.14 * s, oy, hip[0], hip[1]);
+  line(ctx, hip[0], hip[1], sh[0], sh[1]);
+  line(ctx, sh[0], sh[1] + 0.05 * s, contactX - sg * 4, V.Y(Math.min(hk, 2.1)));
+  ctx.beginPath(); ctx.arc(head[0], head[1], 0.12 * s, 0, TAU); ctx.fill();
+  ctx.lineCap = 'butt';
 }
 
 function floorRuler(ctx, V, col) {
@@ -1569,7 +1981,7 @@ function ballastPlates(kg) {
 
 /* instantaneous elastic deflection (m, in the tipping direction) at each beam node, from the live wind and strap force */
 function bendNow(D, sim) {
-  const b = D.bend, lam = sim.lam || 0, Ph = sim.Ph || 0;
+  const b = D.bend, lam = sim.lamB !== undefined ? sim.lamB : (sim.lam || 0), Ph = sim.Ph || 0;
   return b.nodeZ.map((z, k) => lam * b.dp1[k] - Ph * b.Gat[k]);
 }
 function bendExag(D, mode) {                         // visual exaggeration: auto makes a few per cent of the height visible
@@ -1614,7 +2026,8 @@ function bentStrip(ctx, V, xc, wpx, yb, yt, off, fill, seg) {
 function drawRig(ctx, V, st, o) {
   const { S, D, sim } = st, g = D.geom, rear = D.dir === 'rear';
   const X = V.X, Y = V.Y, s = V.s, y0 = M.SHEET.screenBottom, cabH = D.cabH;
-  const pivotX = rear ? 0 : -g.depth, rot = o.rotate === false ? 0 : (rear ? 1 : -1) * sim.phi;
+  const sd = sim.side || (rear ? 1 : -1);                           // which toe it tips about: +1 front, -1 rear
+  const pivotX = sd > 0 ? 0 : -g.depth, rot = o.rotate === false ? 0 : sd * sim.phi;
   const off = o.off || (() => 0);
   const px = (m, mn) => Math.max(m * s, mn);
   const scrDepth = S.cabDepth || 0.083;
@@ -1696,10 +2109,10 @@ function drawStage(ctx, V, st, ink) {
   const x0 = V.X(stg.xRear), x1 = V.X(stg.xFront), yT = V.Y(stg.h), yB = V.Y(0), s = V.s;
   const th = Math.max(4, 0.09 * s);
   ctx.strokeStyle = 'rgba(170,188,212,.55)'; ctx.lineWidth = Math.max(1.5, 0.05 * s);
-  const nLeg = Math.max(2, Math.round(stg.depth / 1.2) + 1);
-  for (let i = 0; i < nLeg; i++) { const x = x0 + (x1 - x0) * i / (nLeg - 1); line(ctx, x, yT + th, x, yB); }
+  const nLeg = Math.max(2, Math.round(stg.depth / 1.2) + 1), sh = st.legShear || 0;     // sh: the feet stay on the floor while the deck sways
+  for (let i = 0; i < nLeg; i++) { const x = x0 + (x1 - x0) * i / (nLeg - 1); line(ctx, x, yT + th, x + sh, yB); }
   ctx.lineWidth = 1;
-  for (let i = 0; i < nLeg - 1; i++) { const xa = x0 + (x1 - x0) * i / (nLeg - 1), xb = x0 + (x1 - x0) * (i + 1) / (nLeg - 1); line(ctx, xa, yB, xb, yT + th); line(ctx, xb, yB, xa, yT + th); }
+  for (let i = 0; i < nLeg - 1; i++) { const xa = x0 + (x1 - x0) * i / (nLeg - 1), xb = x0 + (x1 - x0) * (i + 1) / (nLeg - 1); line(ctx, xa + sh, yB, xb, yT + th); line(ctx, xb + sh, yB, xa, yT + th); }
   const sk = ctx.createLinearGradient(0, yT, 0, yB); sk.addColorStop(0, C.stage0); sk.addColorStop(1, C.stage1);
   ctx.fillStyle = sk; ctx.fillRect(x1 - Math.max(5, 0.12 * s), yT + th, Math.max(5, 0.12 * s), yB - yT - th);
   ctx.fillStyle = C.deck; ctx.fillRect(x0, yT, x1 - x0, th);
@@ -1713,7 +2126,7 @@ function drawStage(ctx, V, st, ink) {
 function drawStrap(ctx, V, st, ink, offA) {
   const { S, D, sim } = st, sp = D.strap; if (!sp) return;
   const hs = D.geom.hs, sMode = D.gov === 'S', rear = D.dir === 'rear', sign = rear ? 1 : -1;
-  const rot = sign * sim.phi;
+  const rot = (sim.side || sign) * sim.phi;
   let ax = sp.attachX + sign * offA, ay = sp.a + hs;
   const pivX = D.geom.pivotX, pivY = sMode ? 0 : hs;
   if (rot) { const dx = ax - pivX, dy = ay - pivY, c = Math.cos(rot), sn = Math.sin(rot); ax = pivX + dx * c + dy * sn; ay = pivY - dx * sn + dy * c; }
@@ -1762,7 +2175,8 @@ function drawStrap(ctx, V, st, ink, offA) {
 
 /* arms, weights and the lift gap, drawn unrotated and faded out once the screen tilts */
 function drawBaseNotes(ctx, V, st, ink, fade, o) {
-  const { S, D, sim, ui } = st, g = D.geom, X = V.X, Y = V.Y, s = V.s, rear = D.dir === 'rear';
+  const { S, D, sim, ui } = st, g = D.geom, X = V.X, Y = V.Y, s = V.s;
+  const rear = (sim.side || (D.dir === 'rear' ? 1 : -1)) > 0;       // the toe it tips about now (front toe when true)
   const sMode = D.gov === 'S';
   const pivotX = rear ? 0 : -g.depth;
   const kgB = ui.selected >= 0 && ui.selected < D.N ? D.ballast[ui.selected] : D.Wb / D.N;
@@ -1795,8 +2209,10 @@ function drawBaseNotes(ctx, V, st, ink, fade, o) {
   }
   const pX = X(pivotX), pY = Y(0);
   if (!sMode) {
-    ctx.fillStyle = ink.pivot; ctx.beginPath(); ctx.moveTo(pX, pY + 1); ctx.lineTo(pX - 6, pY + 11); ctx.lineTo(pX + 6, pY + 11); ctx.closePath(); ctx.fill();
-    txt(ctx, 'pivot', pX + (rear ? 9 : -9), pY + 22, { font: '600 10px ' + F.sans, align: rear ? 'left' : 'right', color: ink.text, halo: ink.halo, haloW: 3 });
+    const tri = (x) => { ctx.fillStyle = ink.pivot; ctx.beginPath(); ctx.moveTo(x, pY + 1); ctx.lineTo(x - 6, pY + 11); ctx.lineTo(x + 6, pY + 11); ctx.closePath(); ctx.fill(); };
+    tri(pX);
+    if (D.shake && sim.phi < 0.0008) { tri(X(rear ? -g.depth : 0)); txt(ctx, 'toes', X(-g.depth / 2), pY + 22, { font: '600 10px ' + F.sans, align: 'center', color: ink.text, halo: ink.halo, haloW: 3 }); }   // it can tip about either
+    else txt(ctx, 'pivot', pX + (rear ? 9 : -9), pY + 22, { font: '600 10px ' + F.sans, align: rear ? 'left' : 'right', color: ink.text, halo: ink.halo, haloW: 3 });
   }
   if (!sMode && sim.phi > 0.0008) {
     const rotA = (rear ? 1 : -1) * sim.phi, farX = rear ? -g.depth : 0;
@@ -1809,6 +2225,29 @@ function drawBaseNotes(ctx, V, st, ink, fade, o) {
   }
 }
 
+/* the push, or the inertia of a shaking wall, in place of the wind arrows */
+function drawLoadArrows(ctx, V, st, ink, fade) {
+  const { S, D, sim } = st, g = D.geom, L = sim.lam, a = Math.abs(L);
+  if (a < 0.01 || fade < 0.02) return;
+  const sgn = D.shake ? (L >= 0 ? 1 : -1) : (D.dir === 'rear' ? 1 : -1);          // +1 pushes toward the front (right on screen)
+  const hy = V.Y(g.hc);
+  ctx.save(); ctx.globalAlpha = fade; ctx.strokeStyle = ink.force; ctx.fillStyle = ink.force; ctx.lineCap = 'round';
+  if (D.loadKind === 'force') {
+    const kg = S.knock.kgf * a, contact = V.X(sgn > 0 ? -0.67 : 0.05), len = clamp(26 + 0.8 * kg, 30, 130), tail = contact - sgn * (len + 8);
+    ctx.lineWidth = 4.5; arrow(ctx, tail, hy, contact - sgn * 8, hy, 13, 8);
+    ctx.beginPath(); ctx.arc(tail, hy, 6.5, 0, TAU); ctx.fill();                       // the hand or the trolley
+    txt(ctx, 'push ' + nf0(kg) + ' kgf', (tail + contact) / 2, hy - 13, { font: '600 12px ' + F.mono, align: 'center', color: ink.force, halo: ink.halo, haloW: 3.5 });
+  } else {
+    const Fk = D.F.kgf * a, x0 = V.X(-0.3), len = clamp(22 + 46 * Math.sqrt(a), 24, 120);
+    ctx.lineWidth = 4; arrow(ctx, x0, hy, x0 + sgn * len, hy, 13, 8);
+    txt(ctx, 'inertia ' + nf0(Fk) + ' kgf', x0 + sgn * len / 2, hy - 12, { font: '600 12px ' + F.mono, align: 'center', color: ink.force, halo: ink.halo, haloW: 3.5 });
+    const fy = V.Y(0) + 26, xm = V.X(-g.depth / 2), fl = clamp(14 + 40 * Math.sqrt(a), 16, 90);   // the floor goes the other way
+    ctx.strokeStyle = ink.dim; ctx.fillStyle = ink.dim; ctx.lineWidth = 2.4; arrow(ctx, xm + sgn * fl / 2, fy, xm - sgn * fl / 2, fy, 9, 6);
+    txt(ctx, 'floor', xm - sgn * (fl / 2 + 6), fy + 4, { font: '600 10px ' + F.sans, align: sgn > 0 ? 'right' : 'left', color: ink.text, halo: ink.halo, haloW: 3 });
+  }
+  ctx.restore();
+}
+
 /* wind arrows on the windward face, the resultant, and the height dimensions on the lee side (rig view) */
 function drawWindNotes(ctx, V, st, ink, u) {
   const { S, D, sim } = st, g = D.geom, rear = D.dir === 'rear', sign = rear ? 1 : -1;
@@ -1817,7 +2256,8 @@ function drawWindNotes(ctx, V, st, ink, u) {
   const fade = 1 - smooth((sim.phi - 0.12) / 0.5);
   const y0 = M.SHEET.screenBottom, hs = g.hs;
   const alpha = D.profileAlpha || 0;
-  if (pStrength > 0.005 && fade > 0.02) {
+  if (D.loadKind !== 'wind') drawLoadArrows(ctx, V, st, ink, fade);
+  else if (pStrength > 0.005 && fade > 0.02) {
     const n = clamp(Math.round(S.H), 3, 14);
     ctx.globalAlpha = fade; ctx.strokeStyle = ink.arrow; ctx.fillStyle = ink.arrow; ctx.lineWidth = 1.6;
     for (let j = 0; j < n; j++) {
@@ -1859,8 +2299,14 @@ function drawSide(canvas, st) {
   Vr.Y = (y) => Vr.oy - y * V.s;
   const ink = INK[outdoor ? 'outdoor' : 'indoor'];
   const u = sim.lastU, sign = D.dir === 'rear' ? 1 : -1;
-  const vNow = D.wind.vPeak * u, vNormal = vNow * D.wind.cn;
-  const env = { sign, vmean: vNow, speed: vNormal, outdoor };
+  const sd = sim.side || sign, windy = D.loadKind === 'wind';                      // sd: the toe it tips about now
+  const exagG = sim.groundAmp > 0 ? clamp(0.2 / sim.groundAmp, 1, 200) : 1;        // the floor's movement is tiny: draw it larger
+  const gx = sim.groundAmp > 0 ? sim.ground * sim.groundAmp * exagG * V.s : 0;
+  const vNow = windy ? D.wind.vPeak * u : 0, vNormal = windy ? vNow * D.wind.cn : 0;
+  const deckSway = D.loadCase === 'sway' && !!D.stage;                             // the deck wobbles on legs that stay on the floor
+  st.legShear = deckSway ? -gx : 0;
+  const env = { sign, vmean: vNow, speed: vNormal, outdoor, kind: D.loadCase, gx: deckSway ? 0 : gx, amt: windy ? u : Math.abs(sim.lam),
+    pushSign: D.shake ? (sim.pushDir || 1) : sign, pushH: D.geom.hc };
   const nodesNow = bendNow(D, sim), exag = bendExag(D, ui.exag);
   st.exag = exag; st.nodesNow = nodesNow;
   const off = offFn(st, V, nodesNow, exag);
@@ -1871,14 +2317,15 @@ function drawSide(canvas, st) {
   }
   if (outdoor) drawOutdoor(ctx, V, env); else drawIndoor(ctx, V, env);
   const topY = V.oy - (hs + (S.H + 0.1) * Math.cos(sim.phi) + 0.35) * V.s;
-  drawParticles(ctx, V, env, topY);
+  if (windy) drawParticles(ctx, V, env, topY);
+  const pivS = D.shake ? (sd > 0 ? D.sides.fwd.geom.pivotX : D.sides.back.geom.pivotX) : D.geom.pivotX;
 
   // stage + rig. In stage mode the whole thing rocks about the stage toe; otherwise only the wall rocks on its deck.
+  ctx.save(); ctx.translate(gx, 0);                              // everything standing on the floor goes with it when the floor shakes
   ctx.save();
   if (outdoor) { ctx.shadowColor = 'rgba(6,18,30,.55)'; ctx.shadowBlur = 5; }
   if (sMode && sim.phi) {
-    const rotS = sign * sim.phi;
-    ctx.translate(V.X(D.geom.pivotX), V.Y(0)); ctx.rotate(rotS); ctx.translate(-V.X(D.geom.pivotX), -V.Y(0));
+    ctx.translate(V.X(pivS), V.Y(0)); ctx.rotate(sd * sim.phi); ctx.translate(-V.X(pivS), -V.Y(0));
   }
   drawStage(ctx, V, st, ink);
   drawRig(ctx, Vr, st, { detail: false, rotate: !sMode, off });
@@ -1887,11 +2334,11 @@ function drawSide(canvas, st) {
   drawWindNotes(ctx, Vr, st, ink, u);
   drawBaseNotes(ctx, Vr, st, ink, 0, { arms: false });
   if (sMode) {                                                   // stage rocks: pivot marker on the floor and the lift at the far edge
-    const pX = V.X(D.geom.pivotX), pY = V.Y(0), rear = D.dir === 'rear';
+    const pX = V.X(pivS), pY = V.Y(0), rear = sd > 0;
     ctx.fillStyle = ink.pivot; ctx.beginPath(); ctx.moveTo(pX, pY + 1); ctx.lineTo(pX - 6, pY + 11); ctx.lineTo(pX + 6, pY + 11); ctx.closePath(); ctx.fill();
     txt(ctx, 'pivot', pX + (rear ? 9 : -9), pY + 22, { font: '600 10px ' + F.sans, align: rear ? 'left' : 'right', color: ink.text, halo: ink.halo, haloW: 3 });
     if (sim.phi > 0.0008) {
-      const rotA = sign * sim.phi, farX = rear ? D.stage.xRear : D.stage.xFront, dx = (farX - D.geom.pivotX) * V.s, c = Math.cos(rotA), sn = Math.sin(rotA);
+      const rotA = sd * sim.phi, farX = rear ? D.stage.xRear : D.stage.xFront, dx = (farX - pivS) * V.s, c = Math.cos(rotA), sn = Math.sin(rotA);
       const fx = pX + dx * c, fy = pY + dx * sn, lm = Math.sin(sim.phi) * D.stage.depth * 1000;
       ctx.strokeStyle = '#ffd24a'; ctx.lineWidth = 1.6; line(ctx, fx, pY, fx, fy); line(ctx, fx - 4, pY, fx + 4, pY); line(ctx, fx - 4, fy, fx + 4, fy);
       txt(ctx, 'stage lifts ' + nf(lm, lm < 100 ? 1 : 0) + ' mm', fx + (rear ? -8 : 8), (fy + pY) / 2 + 3, { font: '600 10.5px ' + F.mono, align: rear ? 'right' : 'left', color: '#ffe9a8', halo: ink.halo, haloW: 3 });
@@ -1900,6 +2347,8 @@ function drawSide(canvas, st) {
   if (st.exag > 1.5 && Math.abs(D.bend.topEl) > 1e-5) {
     txt(ctx, 'bending drawn ×' + nf0(st.exag), V.X(D.dir === 'rear' ? 0.38 : -D.geom.depth - 0.38) + (D.dir === 'rear' ? 7 : -7), Vr.Y(S.H + 0.1) + 18, { font: '500 10px ' + F.mono, align: D.dir === 'rear' ? 'left' : 'right', color: ink.text, halo: ink.halo, haloW: 3 });
   }
+  ctx.restore();                                                 // the floor's shake
+  if (exagG > 1.5) txt(ctx, (deckSway ? 'deck' : 'floor') + ' shaking drawn ×' + nf0(exagG), V.w - 12, V.oy + 42, { font: '500 10px ' + F.mono, align: 'right', color: ink.text, halo: ink.halo, haloW: 3 });
   ctx.restore();
   if (sim.toppled && sim.phi > 1.2) {
     ctx.fillStyle = 'rgba(208,59,59,.12)'; ctx.fillRect(0, 0, w, h);
@@ -1972,10 +2421,13 @@ function drawFront(canvas, st) {
   const tipDir = D.dir === 'rear' ? 1 : -1, sMode = D.gov === 'S';
   const dep = S.cabDepth || 0.083, cabH = D.cabH;
   const exag = st.exag || bendExag(D, ui.exag), nodes = st.nodesNow || bendNow(D, sim), Kn = nodes.length - 1;
-  const t = st.t, u = sim.lastU, vNow = D.wind.vPeak * u;
+  const windy = D.loadKind === 'wind';
+  const t = st.t, u = sim.lastU, vNow = windy ? D.wind.vPeak * u : 0;
   const defl = (y) => { const f = clamp(y / L, 0, 1) * Kn, i = Math.min(Kn - 1, Math.floor(f)), k = f - i; return nodes[i] * (1 - k) + nodes[i + 1] * k; };
-  const th = tipDir * sim.phi, cth = Math.cos(th), sth = Math.sin(th);
-  const pivZ = D.geom.pivotX, pivY = sMode ? 0 : hs;
+  const sd = sim.side || tipDir;                                              // the toe it tips about now
+  const th = sd * sim.phi, cth = Math.cos(th), sth = Math.sin(th);
+  const pivZ = D.shake ? (sd > 0 ? D.sides.fwd.geom.pivotX : D.sides.back.geom.pivotX) : D.geom.pivotX, pivY = sMode ? 0 : hs;
+  const gz = sim.groundAmp > 0 ? sim.ground * sim.groundAmp * clamp(0.2 / sim.groundAmp, 1, 200) : 0;   // the floor shaking, drawn larger than it is
   const rot3 = (p) => { if (!th) return p; const dZ = p[2] - pivZ, dY = p[1] - pivY; return [p[0], pivY + dY * cth - dZ * sth, pivZ + dZ * cth + dY * sth]; };
   const wallPt = (x, y, z0) => rot3([x, hs + y, z0 + tipDir * exag * defl(clamp(y, 0, L))]);
 
@@ -1987,7 +2439,7 @@ function drawFront(canvas, st) {
   for (const x of [-W / 2, W / 2]) for (const y of [hs, hs + L]) fitPts.push([x, y, 0], [x, y, -1]);
   if (stg) for (const x of [-stg.width / 2 - 0.2, stg.width / 2 + 0.2]) for (const z of [stg.xRear, stg.xFront]) fitPts.push([x, 0, z], [x, hs, z]);
   const fit = cameraFit(cam, fitPts, w, h, { l: 70, r: 70, t: 56, b: 46 });
-  const P = (p) => { const v = v3sub(p, cam.C), zc = v3dot(v, cam.f); return [fit.ox + v3dot(v, cam.r) / zc * fit.fpx, fit.oy - v3dot(v, cam.u) / zc * fit.fpx, zc]; };
+  const P = (p) => { const v = v3sub([p[0], p[1], p[2] + gz], cam.C), zc = v3dot(v, cam.f); return [fit.ox + v3dot(v, cam.r) / zc * fit.fpx, fit.oy - v3dot(v, cam.u) / zc * fit.fpx, zc]; };
   st.fcam = { cam, fit };
 
   // ---- backdrop
@@ -2010,7 +2462,7 @@ function drawFront(canvas, st) {
 
   // ---- wind streaks that stay behind the wall
   const wallC = P([0, hs + L / 2, 0]);
-  streaks(ctx, P, fview, st, W, H + hs, wallC[2], true, vNow);
+  if (windy) streaks(ctx, P, fview, st, W, H + hs, wallC[2], true, vNow);
 
   // ---- stage
   if (stg) {
@@ -2097,7 +2549,7 @@ function drawFront(canvas, st) {
   }
 
   // ---- wind streaks in front of the wall
-  streaks(ctx, P, fview, st, W, H + hs, wallC[2], false, vNow);
+  if (windy) streaks(ctx, P, fview, st, W, H + hs, wallC[2], false, vNow);
 
   // ---- labels on the wall
   const labCol = outdoor ? '#0b3550' : '#dcf2ff', labHalo = outdoor ? 'rgba(255,255,255,.9)' : 'rgba(6,10,18,.88)';
@@ -2197,11 +2649,16 @@ function drawRear(canvas, st, hit) {
     txt(ctx, sp.n + ' × ' + (sp.type === 'truss' ? 'truss' : sp.type === 'cable' ? 'cable' : 'strap') + ' at ' + nf(sp.a, 1) + ' m', x0 + 6, ay + 19, { font: '500 10px ' + F.mono, color: BP.strap, halo: BP.wall, haloW: 3 });
   }
   const rearWind = D.dir === 'rear', gx = w - 22, gy = 15;
-  ctx.strokeStyle = BP.force; ctx.fillStyle = BP.force; ctx.lineWidth = 1.6;
-  ctx.beginPath(); ctx.arc(gx, gy, 7.5, 0, TAU); ctx.stroke();
-  if (rearWind) { line(ctx, gx - 3.2, gy - 3.2, gx + 3.2, gy + 3.2); line(ctx, gx + 3.2, gy - 3.2, gx - 3.2, gy + 3.2); }
-  else { ctx.beginPath(); ctx.arc(gx, gy, 2.4, 0, TAU); ctx.fill(); }
-  txt(ctx, D.wind.cn < 0.03 ? 'wind parallel to the screen' : rearWind ? 'wind from the rear (away from you)' : 'wind from the front (toward you)', gx - 13, gy + 4, { font: '500 11px ' + F.sans, align: 'right', color: BP.text });
+  if (D.loadKind === 'wind') {
+    ctx.strokeStyle = BP.force; ctx.fillStyle = BP.force; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(gx, gy, 7.5, 0, TAU); ctx.stroke();
+    if (rearWind) { line(ctx, gx - 3.2, gy - 3.2, gx + 3.2, gy + 3.2); line(ctx, gx + 3.2, gy - 3.2, gx - 3.2, gy + 3.2); }
+    else { ctx.beginPath(); ctx.arc(gx, gy, 2.4, 0, TAU); ctx.fill(); }
+    txt(ctx, D.wind.cn < 0.03 ? 'wind parallel to the screen' : rearWind ? 'wind from the rear (away from you)' : 'wind from the front (toward you)', gx - 13, gy + 4, { font: '500 11px ' + F.sans, align: 'right', color: BP.text });
+  } else {
+    const say = D.loadKind === 'force' ? (S.knock.from === 'both' ? 'push from either side' : 'push from the ' + S.knock.from) : 'floor shakes front to back';
+    txt(ctx, say, gx + 8, gy + 4, { font: '500 11px ' + F.sans, align: 'right', color: BP.text });
+  }
 
   const bTop = y1 + 40, bBot = h - padB;
   const yv = (kg) => bBot - clamp(kg / niceTop, 0, 1.05) * (bBot - bTop);
@@ -2305,6 +2762,31 @@ function drawPlan(canvas, st, hit) {
   ctx.fillStyle = '#c5d0df'; ctx.fillRect(wx0, cy - 4, wallPx, 5);
   ctx.save(); ctx.shadowColor = 'rgba(100,215,255,.9)'; ctx.shadowBlur = 8; ctx.fillStyle = '#6fd6ff'; ctx.fillRect(wx0, cy + 0.5, wallPx, 2); ctx.restore();
 
+  if (D.loadKind !== 'wind') {                              // a push or a shake works along the front-back line only: no direction to drag
+    hit.handle = null;
+    ctx.strokeStyle = BP.force; ctx.fillStyle = BP.force; ctx.lineCap = 'round';
+    const pulse = 0.5 + 0.5 * Math.min(1, Math.abs(st.sim.lam));
+    if (D.loadKind === 'force') {
+      const both = S.knock.from === 'both', sides = both ? [-1, 1] : [S.knock.from === 'rear' ? -1 : 1];
+      for (const sd of sides) {                              // sd -1: from the rear (top of the dial), +1: from the front
+        const y0p = cy + sd * (R * 0.95), y1p = cy + sd * (R * 0.34), act = both ? (st.sim.lam >= 0 ? sd === -1 : sd === 1) : true;
+        ctx.globalAlpha = act ? 1 : 0.4; ctx.lineWidth = 2.6; line(ctx, cx, y0p, cx, y1p);
+        arrow(ctx, cx, cy + sd * R * 0.4, cx, cy + sd * R * 0.3, 10, 6.5);
+        ctx.beginPath(); ctx.arc(cx, y0p, 7 * pulse + 2, 0, TAU); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      txt(ctx, nf0(S.knock.kgf) + ' kgf at ' + nf1(S.knock.h) + ' m', cx, cy + R * 0.62, { font: '600 11.5px ' + F.mono, align: 'center', color: BP.bright, halo: BP.bg, haloW: 3 });
+      txt(ctx, 'shared by ' + S.knock.share + ' of ' + D.N + ' bases', cx, cy + R * 0.62 + 14, { font: '500 10.5px ' + F.sans, align: 'center', color: BP.cyan, halo: BP.bg, haloW: 3 });
+    } else {
+      ctx.lineWidth = 2.6; line(ctx, cx, cy - R * 0.86, cx, cy + R * 0.86);
+      arrow(ctx, cx, cy - R * 0.96, cx, cy - R * 0.74, 10, 6.5); arrow(ctx, cx, cy + R * 0.96, cx, cy + R * 0.74, 10, 6.5);
+      const aNow = Math.abs(st.sim.lam) * (D.rig.acc || 0) / M.G;
+      txt(ctx, nf(aNow, 3) + ' g now', cx, cy + R * 0.62, { font: '600 11.5px ' + F.mono, align: 'center', color: BP.bright, halo: BP.bg, haloW: 3 });
+      txt(ctx, 'the wall tips the weaker way', cx, cy + R * 0.62 + 14, { font: '500 10.5px ' + F.sans, align: 'center', color: BP.cyan, halo: BP.bg, haloW: 3 });
+    }
+    ctx.lineCap = 'butt';
+    return;
+  }
   const a = S.windDir * Math.PI / 180, sn = Math.sin(a), cs = Math.cos(a);
   const sx = cx + sn * R, sy = cy - cs * R;
   const dx = -sn, dy = cs, nx = -dy, ny = dx;
@@ -2328,19 +2810,49 @@ function drawPlan(canvas, st, hit) {
 }
 
 /* ---------------- stability map ----------------
-   Curves are traced from the ballast side: for each ballast, the wind that just reaches the required safety factor and the wind
-   that tips it. Wind speed scales with the square root of the load factor, so this needs one solve per ballast value. */
-function mapCurves(D, S) {
-  const vM = D.wind.vMean, N = D.N, pts = [];
+   Curves are traced from the ballast side: for each ballast, the load that just reaches the required safety factor and the load
+   that tips it. Wind speed scales with the square root of the load factor, a push or a shake directly, so this needs one solve
+   per ballast value. */
+function axisOf(st) {                                // what the horizontal axis is, for the load in play
+  const { S, D } = st, kind = D.loadKind, cs = D.loadCase;
+  if (kind === 'wind') {
+    return { kind, x0: D.wind.vMean, exp: 0.5, label: 'mean wind speed (m/s)', sub: 'ballast per base against wind', th1: 'Wind (m/s)', th2: 'Beaufort',
+      max: Math.ceil(Math.max(S.mode === 'indoor' ? 18 : 30, D.wind.vMean * 1.3) / 5) * 5, you: nf(D.wind.vMean, 1) + ' m/s' };
+  }
+  if (kind === 'force') {
+    const x0 = Math.max(S.knock.kgf, 1e-6);
+    return { kind, x0, exp: 1, label: 'push (kgf)', sub: 'ballast per base against the push', th1: 'Push (kgf)', th2: 'Times yours', max: niceMax(Math.max(100, x0 * 1.6)), you: nf0(x0) + ' kgf' };
+  }
+  if (cs === 'sway') {
+    const g = Math.max(Math.pow(2 * Math.PI * S.sway.f, 2) * S.sway.amp / 1000 / M.G, 1e-6);
+    return { kind, x0: g, exp: 1, label: 'peak deck acceleration (g)', sub: 'ballast per base against the shake', th1: 'Shake (g)', th2: 'Times yours', max: niceMax(Math.max(0.15, g * 1.6)), you: nf(g, 3) + ' g' };
+  }
+  if (cs === 'quake') {
+    const g = Math.max(S.quake.pga, 1e-6);
+    return { kind, x0: g, exp: 1, label: 'ground acceleration (g)', sub: 'ballast per base against the earthquake', th1: 'Ground (g)', th2: 'Times yours', max: niceMax(Math.max(0.5, g * 1.4)), you: nf2(g) + ' g', zones: true };
+  }
+  const p = Math.max(S.notional.pct, 1e-6);
+  return { kind, x0: p, exp: 1, label: 'sideways load (% of the weight)', sub: 'ballast per base against the sideways load', th1: 'Load (% of weight)', th2: 'Times yours', max: niceMax(Math.max(6, p * 1.6)), you: nf1(p) + '%' };
+}
+function axisTitle(ax, v) {
+  if (ax.kind === 'wind') return 'Mean wind ' + nf1(v) + ' m/s · Beaufort ' + M.beaufort(v);
+  if (ax.kind === 'force') return 'Push ' + nf0(v) + ' kgf';
+  if (ax.zones) return 'Ground ' + nf2(v) + ' g';
+  return ax.th1.indexOf('Shake') === 0 ? 'Deck shake ' + nf(v, 3) + ' g' : 'Load ' + nf1(v) + '% of the weight';
+}
+const reqAtAxis = (D, ax, x, SFt) => (ax.kind === 'wind' ? D.reqPerAtSpeed(x, SFt) : D.reqPerAtLoad(x, SFt, ax.x0));
+const sfAtAxis = (D, ax, x) => { const r = x / ax.x0; return x > 0 ? D.SFact / (ax.kind === 'wind' ? r * r : r) : Infinity; };
+function mapCurves(D, S, ax) {
+  const N = D.N, pts = [];
   const grid = [0];
   for (let b = 0.4; b < 8000; b *= 1.115) grid.push(b);
   for (const b of grid) {
     const lam = Math.min(D.sfOf(b * N), 1e6);
-    pts.push({ b, vAllow: vM * Math.sqrt(lam / S.SF), vCrit: vM * Math.sqrt(lam) });
+    pts.push({ b, vAllow: ax.x0 * Math.pow(lam / S.SF, ax.exp), vCrit: ax.x0 * Math.pow(lam, ax.exp) });
   }
   return pts;
 }
-function bAtV(pts, key, v) {                         // ballast per base needed to reach wind speed v
+function bAtV(pts, key, v) {                         // ballast per base needed to reach load v
   if (v <= pts[0][key]) return 0;
   for (let i = 1; i < pts.length; i++) if (pts[i][key] >= v) { const a = pts[i - 1], b = pts[i], f = (v - a[key]) / (b[key] - a[key] || 1); return a.b + f * (b.b - a.b); }
   return Infinity;
@@ -2348,17 +2860,17 @@ function bAtV(pts, key, v) {                         // ballast per base needed 
 function drawMap(canvas, st, hit) {
   const { ctx, w, h } = fitCanvas(canvas);
   ctx.clearRect(0, 0, w, h);
-  const { S, D } = st, T = theme(), indoor = S.mode === 'indoor';
+  const { S, D } = st, T = theme(), ax = axisOf(st), wind = ax.kind === 'wind';
   const padL = 46, padR = 14, padT = 38, padB = 34, pw = w - padL - padR, ph = h - padT - padB;
-  const xMax = Math.ceil(Math.max(indoor ? 18 : 30, D.wind.vMean * 1.3) / 5) * 5;
-  const pts = mapCurves(D, S);
+  const xMax = ax.max;
+  const pts = mapCurves(D, S, ax);
   const req = (v) => bAtV(pts, 'vAllow', v), tip = (v) => bAtV(pts, 'vCrit', v);
   const avg = D.Wb / D.N;
   let yTop = Math.pow(10, Math.ceil(Math.log10(Math.max(Math.min(req(xMax), 1e6), avg * 2, 30))));
   yTop = clamp(yTop, 100, 1e6);
   const c0 = 2, ys = (kg) => Math.log10(1 + Math.max(0, kg) / c0), ysTop = ys(yTop);
   const xp = (v) => padL + v / xMax * pw, yp = (kg) => padT + ph - clamp(ys(kg) / ysTop, 0, 1.2) * ph;
-  hit.map = { padL, padT, pw, ph, xMax, yTop, c0, ysTop, xp, yp, w, h };
+  hit.map = { padL, padT, pw, ph, xMax, yTop, c0, ysTop, xp, yp, w, h, ax };
   hit.vAt = (px) => clamp((px - padL) / pw * xMax, 0, xMax);
   hit.kgAt = (py) => { const f = clamp((padT + ph - py) / ph, 0, 1); return c0 * (Math.pow(10, f * ysTop) - 1); };
 
@@ -2374,20 +2886,30 @@ function drawMap(canvas, st, hit) {
   ctx.lineWidth = 1; ctx.font = '10.5px ' + F.mono;
   const yt = [0, 10, 100, 1000, 10000, 100000, 1000000].filter(v => v <= yTop);
   yt.forEach(v => { const y = Math.round(yp(v)) + 0.5; ctx.strokeStyle = v === 0 ? T.ink3 : T.line; line(ctx, padL, y, padL + pw, y); txt(ctx, v >= 1000 ? (v / 1000) + 'k' : String(v), padL - 7, y + 3.5, { font: '10.5px ' + F.mono, align: 'right', color: T.ink3 }); });
-  const xs = xMax <= 20 ? 2 : 5;
-  for (let v = 0; v <= xMax + 1e-9; v += xs) { const x = Math.round(xp(v)) + 0.5; ctx.strokeStyle = T.line; line(ctx, x, padT, x, padT + ph); txt(ctx, String(v), x, padT + ph + 14, { font: '10.5px ' + F.mono, align: 'center', color: T.ink3 }); }
-  txt(ctx, 'mean wind speed (m/s)', padL + pw / 2, h - 5, { font: '11px ' + F.sans, align: 'center', color: T.ink2 });
+  const xs = wind ? (xMax <= 20 ? 2 : 5) : niceMax(xMax / 5), xd = xs < 0.1 ? 2 : xs < 1 ? 1 : 0;
+  for (let v = 0; v <= xMax + 1e-9; v += xs) { const x = Math.round(xp(v)) + 0.5; ctx.strokeStyle = T.line; line(ctx, x, padT, x, padT + ph); txt(ctx, wind ? String(v) : nf(v, xd), x, padT + ph + 14, { font: '10.5px ' + F.mono, align: 'center', color: T.ink3 }); }
+  txt(ctx, ax.label, padL + pw / 2, h - 5, { font: '11px ' + F.sans, align: 'center', color: T.ink2 });
   txt(ctx, 'kg of ballast per base', padL - 40, 11, { font: '11px ' + F.sans, color: T.ink2 });
-  const bl = M.BFT_NAME.length - 1;
-  const bu = [0.2, 1.5, 3.3, 5.4, 7.9, 10.7, 13.8, 17.1, 20.7, 24.4, 28.4, 32.6, 36.9];
-  ctx.strokeStyle = T.ink3; ctx.lineWidth = 1;
-  for (let b = 1; b <= bl; b++) {
-    const lo = bu[b - 1], hi = bu[b]; if (lo >= xMax) break;
-    const xa = xp(lo), xb = xp(Math.min(hi, xMax));
-    line(ctx, xa + 0.5, padT - 6, xa + 0.5, padT);
-    if (xb - xa >= 13) txt(ctx, String(b), (xa + xb) / 2, padT - 9, { font: '10px ' + F.mono, align: 'center', color: T.ink3 });
+  if (wind) {
+    const bl = M.BFT_NAME.length - 1;
+    const bu = M.BFT_SPEED;
+    ctx.strokeStyle = T.ink3; ctx.lineWidth = 1;
+    for (let b = 1; b <= bl; b++) {
+      const lo = bu[b - 1], hi = bu[b]; if (lo >= xMax) break;
+      const xa = xp(lo), xb = xp(Math.min(hi, xMax));
+      line(ctx, xa + 0.5, padT - 6, xa + 0.5, padT);
+      if (xb - xa >= 13) txt(ctx, String(b), (xa + xb) / 2, padT - 9, { font: '10px ' + F.mono, align: 'center', color: T.ink3 });
+    }
+    txt(ctx, 'Beaufort', padL - 7, padT - 9, { font: '10px ' + F.sans, align: 'right', color: T.ink3 });
+  } else if (ax.zones) {                              // the three Greek seismic zones
+    ctx.strokeStyle = T.ink3; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+    for (const z of M.QUAKE_ZONES) {
+      if (z.g > xMax) continue;
+      const x = Math.round(xp(z.g)) + 0.5; line(ctx, x, padT - 6, x, padT + ph);
+      txt(ctx, 'zone ' + z.zone, x, padT - 9, { font: '10px ' + F.mono, align: 'center', color: T.ink2 });
+    }
+    ctx.setLineDash([]);
   }
-  txt(ctx, 'Beaufort', padL - 7, padT - 9, { font: '10px ' + F.sans, align: 'right', color: T.ink3 });
 
   ctx.save(); ctx.beginPath(); ctx.rect(padL, padT - 1, pw, ph + 1); ctx.clip();
   ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.lineWidth = 2;
@@ -2400,14 +2922,14 @@ function drawMap(canvas, st, hit) {
   if (yB < padT + ph - 14) txt(ctx, 'Tips over', lx + 6, Math.min(padT + ph - 7, yB + 16), { font: '600 11.5px ' + F.sans, color: T.critInk });
   if (yA < padT + ph - 6) txt(ctx, 'needs SF ' + nf2(S.SF), lx - 4, Math.max(padT + 13, yA - 7), { font: '500 11px ' + F.sans, align: 'right', color: T.ink2 });
 
-  const vx = xp(D.wind.vMean), vy = yp(avg);
+  const vx = xp(ax.x0), vy = yp(avg);
   hit.dot = { x: vx, y: vy };
   ctx.strokeStyle = T.ink3; ctx.lineWidth = 1; ctx.setLineDash([2, 3]); line(ctx, vx + 0.5, vy, vx + 0.5, padT + ph); ctx.setLineDash([]);
   const col = D.status === 'stable' ? T.good : D.status === 'marginal' ? T.warn : T.crit;
   ctx.fillStyle = T.panel; ctx.beginPath(); ctx.arc(vx, vy, 9, 0, TAU); ctx.fill();
   ctx.fillStyle = col; ctx.beginPath(); ctx.arc(vx, vy, 6.5, 0, TAU); ctx.fill();
   ctx.strokeStyle = T.ink; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(vx, vy, 6.5, 0, TAU); ctx.stroke();
-  const lab = 'You: ' + nf(avg, avg < 10 ? 1 : 0) + ' kg · ' + nf(D.wind.vMean, 1) + ' m/s';
+  const lab = 'You: ' + nf(avg, avg < 10 ? 1 : 0) + ' kg · ' + ax.you;
   const right = vx > padL + pw * 0.55;
   txt(ctx, lab, vx + (right ? -13 : 13), vy - 11, { font: '600 11px ' + F.mono, align: right ? 'right' : 'left', color: T.ink, halo: T.panel, haloW: 4 });
   if (hit.hoverV != null) {
@@ -2478,7 +3000,7 @@ const SUB = 1 / 240;
 let D = null, sig = '';
 let dirty = { rear: true, map: true, bend: true };
 
-const BAL_MAX = () => (S.mode === 'indoor' ? 200 : 1500);
+const BAL_MAX = () => (S.mode === 'indoor' ? (S.indoorCase === 'quake' ? 1500 : S.indoorCase === 'door' ? 300 : 200) : 1500);
 const roundBallast = (kg) => (kg < 20 ? Math.round(kg * 10) / 10 : kg < 200 ? Math.round(kg * 2) / 2 : Math.round(kg));
 const fmtB = (kg) => (kg < 20 ? kg.toFixed(1) : kg < 200 ? (Math.round(kg * 2) / 2).toFixed(kg % 1 ? 1 : 0) : Math.round(kg).toString());
 const COMPASS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
@@ -2502,6 +3024,12 @@ function normalize() {
   S.outSpeed = clamp(S.outSpeed, 0, 60);
   S.gust = clamp(S.gust, 0, 1);
   S.indoorScale = clamp(Math.round(S.indoorScale), 0, 10);
+  if (M.CASES.indexOf(S.indoorCase) < 0) S.indoorCase = 'draught';
+  S.door.v = clamp(S.door.v, 0, 30); S.door.dur = clamp(S.door.dur, 0.05, 20);
+  const kn = S.knock; kn.kgf = clamp(kn.kgf, 0, 500); kn.h = clamp(kn.h, 0.1, 20); kn.dur = clamp(kn.dur, 0.05, 10); kn.share = clamp(Math.round(kn.share), 1, 60);
+  S.sway.amp = clamp(S.sway.amp, 0, 100); S.sway.f = clamp(S.sway.f, 0.1, 10); S.sway.bounce = clamp(S.sway.bounce, 0, 0.9);
+  S.quake.pga = clamp(S.quake.pga, 0.01, 1.5); S.quake.floor = clamp(S.quake.floor, 1, 4); S.quake.dur = clamp(Math.round(S.quake.dur), 3, 60);
+  S.notional.pct = clamp(S.notional.pct, 0.1, 30);
   S.windDir = ((S.windDir % 360) + 360) % 360;
   S.facing = ((S.facing % 360) + 360) % 360;
   S.EI = clamp(S.EI, 0.05e6, 200e6);
@@ -2525,7 +3053,8 @@ function physSig() {
   const r = D.rig, f = (a) => a.map((v) => v.toFixed(4)).join(',');
   const sp = r.strap ? [r.strap.c0.toFixed(1), r.strap.dp1.toExponential(4), r.strap.gp, r.strap.PhCap.toFixed(0), r.strap.aPiv.toFixed(3), r.strap.xiAtt.toFixed(3)].join(',') : '-';
   const bs = r.bendStrap ? [r.bendStrap.c0.toFixed(1), r.bendStrap.dp1.toExponential(4)].join(',') : '-';
-  return [f(r.m), f(r.x), f(r.y), r.FN === undefined ? r.F.toFixed(2) : r.FN, r.hc.toFixed(4), D.dir, S.mode === 'outdoor' ? S.gust : 0, D.wind.cn.toFixed(4), sp, bs, r.gov].join('|');
+  const ld = S.mode === 'indoor' ? [D.loadCase, S.door.v, S.door.dur, S.knock.kgf, S.knock.h, S.knock.from, S.knock.dur, S.knock.share, S.sway.amp, S.sway.f, S.sway.bounce, S.quake.pga, S.quake.floor, S.quake.dur, S.notional.pct].join(',') : '';
+  return [f(r.m), f(r.x), f(r.y), r.FN === undefined ? r.F.toFixed(2) : r.FN, r.hc.toFixed(4), D.dir, S.mode === 'outdoor' ? S.gust : 0, D.wind.cn.toFixed(4), sp, bs, r.gov, ld].join('|');
 }
 function update() {
   normalize();
@@ -2602,7 +3131,21 @@ function initControls() {
     get: () => D.Wb / D.N, set: (v) => setBallastAll(v), fmt: fmtB,
     toSlider: (kg) => 1000 * Math.sqrt(clamp(kg / BAL_MAX(), 0, 1)), fromSlider: (v) => BAL_MAX() * Math.pow(v / 1000, 2)
   });
+  bindPair('DG', { get: () => S.door.v, set: (v) => (S.door.v = v), fmt: (v) => (+v).toFixed(1) });
+  bindPair('DD', { get: () => S.door.dur, set: (v) => (S.door.dur = v), fmt: (v) => (+v).toFixed(1) });
+  bindPair('KG', { get: () => S.knock.kgf, set: (v) => (S.knock.kgf = v), fmt: (v) => String(Math.round(v)) });
+  bindPair('KH', { get: () => S.knock.h, set: (v) => (S.knock.h = v), fmt: (v) => (+v).toFixed(1), max: () => Math.max(1, D ? D.geom.L : 7) });
+  bindPair('KD', { get: () => S.knock.dur, set: (v) => (S.knock.dur = v), fmt: (v) => (+v).toFixed(2) });
+  bindPair('KS', { get: () => S.knock.share, set: (v) => (S.knock.share = v), fmt: (v) => String(Math.round(v)), max: () => clamp(D ? D.N : 6, 1, 6) });
+  bindPair('SA', { get: () => S.sway.amp, set: (v) => (S.sway.amp = v), fmt: (v) => (+v).toFixed(1) });
+  bindPair('SQ', { get: () => S.sway.f, set: (v) => (S.sway.f = v), fmt: (v) => (+v).toFixed(1) });
+  bindPair('SB', { get: () => S.sway.bounce, set: (v) => (S.sway.bounce = v), fmt: (v) => (+v).toFixed(2) });
+  bindPair('QP', { get: () => S.quake.pga, set: (v) => (S.quake.pga = v), fmt: (v) => (+v).toFixed(2) });
+  bindPair('QF', { get: () => S.quake.floor, set: (v) => (S.quake.floor = v), fmt: (v) => (+v).toFixed(2) });
+  bindPair('QD', { get: () => S.quake.dur, set: (v) => (S.quake.dur = v), fmt: (v) => String(Math.round(v)) });
+  bindPair('NP', { get: () => S.notional.pct, set: (v) => (S.notional.pct = v), fmt: (v) => (+v).toFixed(1) });
   bindPair('V', { get: () => S.outSpeed, set: (v) => (S.outSpeed = v), fmt: (v) => (+v).toFixed(1) });
+  bindPair('BF', { get: () => M.beaufort(S.outSpeed), set: (n) => { S.outSpeed = M.BFT_SPEED[clamp(Math.round(n), 0, 12)]; }, fmt: (v) => String(Math.round(v)) });
   bindPair('GU', { get: () => S.gust * 100, set: (v) => (S.gust = v / 100), fmt: (v) => String(Math.round(v)) });
   bindPair('FA', { get: () => S.facing, set: (v) => (S.facing = v), fmt: (v) => String(Math.round(v)) });
   bindPair('DIR', { get: () => S.windDir, set: (v) => (S.windDir = v), fmt: (v) => String(Math.round(v)) });
@@ -2640,6 +3183,15 @@ function initControls() {
     $(id).addEventListener('blur', () => { $(id).value = S.frame[key]; });
   }
   segs.mode = bindSeg('segMode', (v) => { S.mode = v; update(); });
+  segs.case = bindSeg('segCase', (v) => { S.indoorCase = v; update(); });
+  segs.kfrom = bindSeg('segKFrom', (v) => { S.knock.from = v; update(); });
+  document.querySelectorAll('[data-kg]').forEach((b) => b.addEventListener('click', () => { S.knock.kgf = +b.dataset.kg; S.knock.dur = +b.dataset.kd; update(); }));
+  document.querySelectorAll('[data-sa]').forEach((b) => b.addEventListener('click', () => { S.sway.amp = +b.dataset.sa; S.sway.f = +b.dataset.sq; update(); }));
+  document.querySelectorAll('[data-pga]').forEach((b) => b.addEventListener('click', () => { S.quake.pga = +b.dataset.pga; update(); }));
+  document.querySelectorAll('[data-qf]').forEach((b) => b.addEventListener('click', () => { S.quake.floor = +b.dataset.qf; update(); }));
+  const pickRow = (e) => { const tr = e.target.closest('tr[data-id]'); if (tr) { S.indoorCase = tr.dataset.id; update(); } };
+  $('cmpRows').addEventListener('click', pickRow);
+  $('cmpRows').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickRow(e); } });
   segs.bal = bindSeg('segBal', (v) => { if (v === 'auto') S.ballastAuto = true; else ensureManual(); update(); });
   segs.pos = bindSeg('segPos', (v) => { S.ballastPos = v; update(); });
   segs.speed = bindSeg('segSpeed', (v) => { ui.speed = +v; segs.speed.set(v); });
@@ -2674,7 +3226,13 @@ function syncControls() {
   segs.cab.set(S.cabSize); if ($('cabModel').value !== S.cab) $('cabModel').value = S.cab;
   segs.stage.set(S.stage.on ? 'on' : 'off'); segs.rest.set(S.rest.type); segs.rto.set(S.rest.to); segs.rside.set(S.rest.side); segs.prof.set(S.profile);
   segs.cam.set(ui.cam); segs.exag.set(ui.exag);
-  $('windIndoor').hidden = S.mode !== 'indoor'; $('windOutdoor').hidden = S.mode !== 'outdoor';
+  const indoorNow = S.mode === 'indoor', cs = indoorNow ? S.indoorCase : 'outdoor';
+  $('indoorPick').hidden = !indoorNow; $('cmpSec').hidden = !indoorNow;
+  $('windIndoor').hidden = !(indoorNow && cs === 'draught'); $('windOutdoor').hidden = indoorNow;
+  for (const [id, key] of [['caseDoor', 'door'], ['caseKnock', 'knock'], ['caseSway', 'sway'], ['caseQuake', 'quake'], ['caseNotional', 'notional']]) $(id).hidden = !(indoorNow && cs === key);
+  $('ctlDir').hidden = !(!indoorNow || cs === 'draught' || cs === 'door');
+  segs.case.set(S.indoorCase); segs.kfrom.set(S.knock.from);
+  setText('loadH', indoorNow ? 'What pushes on the wall' : 'Wind');
   $('stageBox').hidden = !S.stage.on;
   const hasR = S.rest.type !== 'none';
   $('restBox').hidden = !hasR; $('ctlTo').hidden = !S.stage.on; $('ctlSide').hidden = S.rest.type === 'truss';
@@ -2696,6 +3254,14 @@ function loadScenario(name) {
   if (name === 'noballast') { S.ballastAuto = false; S.ballastPer = 0; S.ballast = null; }
   if (name === 'draft') { S.indoorScale = 4; S.ballastAuto = false; S.ballastPer = 9.055; S.ballast = null; }
   if (name === 'front') { S.indoorScale = 4; S.windDir = 180; }
+  const sheetBallast = () => { S.ballastAuto = false; S.ballastPer = 9.055; S.ballast = null; };
+  if (name === 'door') { S.indoorCase = 'door'; S.door = { v: 5.4, dur: 1.2 }; sheetBallast(); }
+  if (name === 'knock') { S.indoorCase = 'knock'; S.knock = { kgf: 60, h: 1.2, from: 'rear', dur: 0.3, share: 2 }; sheetBallast(); }
+  if (name === 'wobble') {
+    S.indoorCase = 'sway'; S.sway = { amp: 9, f: 2, bounce: 0.1 }; S.ballastAuto = false; S.ballastPer = 60; S.ballast = null;
+    S.stage.on = true; S.stage.h = 1.2; S.stage.depth = 6; S.stage.front = 4.6;
+  }
+  if (name === 'quake') { S.indoorCase = 'quake'; S.quake = { pga: 0.24, floor: 1, dur: 12 }; sheetBallast(); }
   if (name === 'breeze') { S.mode = 'outdoor'; S.outSpeed = 8; S.gust = 0.3; }
   if (name === 'gale') { S.mode = 'outdoor'; S.outSpeed = 14; S.gust = 0.4; S.ballastAuto = false; S.ballastPer = 300; S.ballast = null; }
   if (name === 'stage') { S.mode = 'outdoor'; S.outSpeed = 8; S.gust = 0.3; S.stage.on = true; S.stage.h = 1.6; S.stage.depth = 6; S.stage.front = 4.6; }
@@ -2728,6 +3294,7 @@ const sfTxt = (v) => (v >= 10 ? '10+' : nf2(v));
 
 function renderText() {
   const w = D.wind, g = D.geom, outdoor = S.mode === 'outdoor', avg = D.Wb / D.N, pr = preset(), sp = D.strap, stg = D.stage;
+  const kindL = D.loadKind, isWind = kindL === 'wind';
   const cabLabel = S.cabSize === '500x500' ? '500 × 500 mm' : '500 × 1000 mm';
   setText('screenSub', nf0(D.A) + ' m² · ' + nf0(D.Ws) + ' kg');
   setText('cabNote', pr.note);
@@ -2737,12 +3304,18 @@ function renderText() {
   setHint('N-h', D.spacingOK ? 'One base every ' + nf2(D.spacing) + ' m. Sheet rule: ' + D.sheetN + ' for this width.' : 'One base every ' + nf2(D.spacing) + ' m. The sheet wants at most 1 m, so ' + D.sheetN + ' bases.', D.spacingOK ? '' : 'warn');
   setHint('B-h', S.ballastAuto ? 'Solves for ' + (sp || stg ? 'the smallest ballast that works with your ' + [stg ? 'stage' : '', sp ? 'straps' : ''].filter(Boolean).join(' and ') : 'the sheet result') + ': ' + nf2(D.req.per) + ' kg per base' + (D.req.capped ? ' (capped, not enough)' : '') + '. Move the slider to take over.' : nf1(D.Wb) + ' kg on ' + D.N + ' bases' + (D.req.none ? '. Nothing is needed here.' : '. Needed: ' + nf2(D.req.per) + ' kg per base.'));
   setText('posNote', 'arm ' + nf(g.aB, 3) + ' m from the toe');
-  setText('modeHint', outdoor ? 'Open-air wind with gusts. The sheet is written for indoor use, so treat this as a rough guide.' : 'Draught from air conditioning, fans and doors. Uses the wind-scale table from the sheet.');
+  setText('modeHint', outdoor ? 'Open-air wind with gusts. The sheet is written for indoor use, so treat this as a rough guide.' : 'Draught from air conditioning, fans and doors. Uses the wind scale from the sheet, which is the Beaufort scale.');
   const row = M.SCALE[S.indoorScale];
-  setText('SC-v', 'scale ' + S.indoorScale + ' · ' + row.v + ' m/s');
-  setHint('SC-h', row.name + ' · ' + row.q + ' N/m² of wind pressure' + (S.indoorScale >= 7 ? '. The sheet says the scale should be below 7.' : ''), S.indoorScale >= 7 ? 'warn' : '');
-  setText('V-v', 'Beaufort ' + w.bftMean + ' · ' + nf0(kmh(S.outSpeed)) + ' km/h');
-  setHint('V-h', M.BFT_NAME[w.bftMean] + ' · ' + nf1(0.625 * S.outSpeed * S.outSpeed) + ' N/m² on average' + (w.bft >= 7 ? '. Peak gusts reach scale ' + w.bft + ', above the sheet limit.' : ''), w.bft >= 7 ? 'warn' : '');
+  setText('SC-v', S.indoorScale + ' · ' + row.v + ' m/s');
+  setHint('SC-h', row.name + ' · ' + row.q + ' N/m² of wind pressure' + (S.indoorScale >= 7 ? '. The sheet says to stay below Beaufort 7.' : ''), S.indoorScale >= 7 ? 'warn' : '');
+  const bn = w.bftMean, br = M.bftRange(bn);
+  setText('BF-v', M.BFT_NAME[bn]);
+  const bfRange = bn >= 12 ? nf1(br.lo) + ' m/s and over (' + nf0(kmh(br.lo)) + ' km/h and over)'
+    : bn === 0 ? 'up to ' + nf1(br.hi) + ' m/s'
+    : nf1(br.lo) + ' to ' + nf1(br.hi) + ' m/s (' + nf0(kmh(br.lo)) + ' to ' + nf0(kmh(br.hi)) + ' km/h)';
+  setHint('BF-h', 'Force ' + bn + ': ' + bfRange + '. A force sets the top of its range, as in the sheet. Type m/s for an exact speed.');
+  setText('V-v', nf0(kmh(S.outSpeed)) + ' km/h');
+  setHint('V-h', nf1(0.625 * S.outSpeed * S.outSpeed) + ' N/m² of wind pressure on average' + (w.bft >= 7 ? '. Peak gusts reach Beaufort ' + w.bft + ', above the sheet limit (below 7).' : ''), w.bft >= 7 ? 'warn' : '');
   setHint('GU-h', 'Peak wind ' + nf1(S.outSpeed * (1 + S.gust)) + ' m/s (Beaufort ' + M.beaufort(S.outSpeed * (1 + S.gust)) + '). The design check uses the peak.');
   setHint('PROF-h', S.profile === 'uniform' ? 'The sheet applies the same pressure over the whole screen.' : 'Wind speed grows with height as (z/10 m)^' + nf2(M.PROFILE_ALPHA[S.profile]) + ', measured at 10 m' + (stg ? ' and counted from the floor, so the stage raises the screen into stronger wind.' : '.') + ' Under 3 m it stays constant.');
   setText('FA-v', 'faces ' + compassName(S.facing) + ' (' + Math.round(S.facing) + '°)');
@@ -2753,7 +3326,7 @@ function renderText() {
   setHint('EI-h', 'About 2.9 for two 50×50×3 aluminium posts 0.38 m apart. Lighter truss is nearer 1, heavy steel nearer 8. Shear flexing of the ladder is included.');
   setText('stageSub', S.stage.on ? nf2(S.stage.h) + ' m high' : 'off');
   if (stg) {
-    setHint('STH-h', 'The wind now acts ' + nf2(g.hs + g.hc) + ' m above the floor.');
+    setHint('STH-h', 'The ' + (isWind ? 'wind' : kindL === 'force' ? 'push' : 'shaking') + ' now acts ' + nf2(g.hs + g.hc) + ' m above the floor.');
     setHint('STD-h', 'Deck area ' + nf0(stg.area) + ' m² (' + nf0(stg.width) + ' m wide), weighs ' + nf0(stg.mass) + ' kg.');
     setHint('STF-h', stg.rearGap < 0 ? 'The base overhangs the rear edge by ' + nf2(-stg.rearGap) + ' m.' : 'The rear of the base is ' + nf2(stg.rearGap) + ' m from the rear edge.', stg.rearGap < 0 ? 'bad' : stg.rearGap < 0.2 ? 'warn' : '');
     setHint('STW-h', 'A Steeldeck 8×4 ft deck weighs 69 to 85 kg, about 25 kg/m², before legs and bracing.');
@@ -2779,15 +3352,16 @@ function renderText() {
   $('tkTip').style.left = (1 / 3 * 100) + '%'; $('tkReq').style.left = clamp(S.SF / 3, 0, 1) * 100 + '%';
   $('tkReq').firstChild.textContent = 'needs ' + nf2(S.SF);
   $('meter').setAttribute('aria-valuenow', String(D.SFact === Infinity ? 3 : D.SFact.toFixed(2)));
-  const need1 = D.reqPerAtSpeed(w.vMean, 1), toToe = D.dir === 'rear' ? 'front' : 'rear';
+  const need1 = isWind ? D.reqPerAtSpeed(w.vMean, 1) : 0, toToe = D.dir === 'rear' ? 'front' : 'rear';
   const strapHolds = sp && sp.active && sp.inCheck && D.SFact >= 10;
   let msg;
-  if (w.cn < 0.02 || D.M.w < 1e-9) msg = 'No wind load: at this angle nothing pushes on the screen.';
+  if (!isWind) msg = indoorVerdict(status, avg);
+  else if (w.cn < 0.02 || D.M.w < 1e-9) msg = 'No wind load: at this angle nothing pushes on the screen.';
   else if (status === 'stable') {
     msg = (D.req.none ? 'The weight of the screen and frame' + (stg ? ', the stage' : '') + (sp ? ' and your straps' : '') + ' alone covers the wind with the margin you asked for. ' : '') +
       'With ' + nf1(avg) + ' kg on each of ' + D.N + ' bases, what holds the screen down is ' + sfTxt(D.SFact) + '× the wind (you need ' + nf2(S.SF) + '×). ' +
-      (sp && D.lean.hangs ? 'At the peak wind it leans ' + nf(D.lean.phi * 180 / Math.PI, 1) + '° and hangs on the ' + RT_NAME(sp.type) + 's, so add ballast to keep the base down. ' : '') +
-      (strapHolds ? 'The straps hold it, so tipping is no longer the limit. Check the anchors, the frame and the cabinet connectors. ' : 'It would start to tip at about ' + nf1(D.limits.vCritMean) + ' m/s' + (outdoor && S.gust > 0 ? ' mean wind' : '') + ' (scale ' + M.beaufort(D.limits.vCritMean) + '). ') +
+      (sp && D.lean.hangs ? 'At the ' + PKW() + ' it leans ' + nf(D.lean.phi * 180 / Math.PI, 1) + '° and hangs on the ' + RT_NAME(sp.type) + 's, so add ballast to keep the base down. ' : '') +
+      (strapHolds ? 'The straps hold it, so tipping is no longer the limit. Check the anchors, the frame and the cabinet connectors. ' : 'It would start to tip at about ' + nf1(D.limits.vCritMean) + ' m/s' + (outdoor && S.gust > 0 ? ' mean wind' : '') + ' (Beaufort ' + M.beaufort(D.limits.vCritMean) + '). ') +
       (stg ? 'The weaker check is that ' + govText() + '.' : '');
   } else if (status === 'marginal') {
     msg = 'It will not tip, but it holds only ' + nf2(D.SFact) + '× the wind and you need ' + nf2(S.SF) + '×. Add about ' + nf1(Math.max(0, D.req.per - avg)) + ' kg to each base, to ' + nf1(D.req.per) + ' kg.' + (stg ? ' The weaker check is that ' + govText() + '.' : '');
@@ -2800,23 +3374,145 @@ function renderText() {
 
   $('tNeedPer').firstChild.textContent = D.req.none ? '0' : nf(D.req.per); setText('tNeedTot', D.req.none ? 'none needed' + (!sp && !stg ? ' (sheet: ' + nf1(D.req.totalRaw) + ' kg)' : '') : nf1(D.req.total) + ' kg in total');
   $('tYourPer').firstChild.textContent = nf(avg); setText('tYourTot', nf1(D.Wb) + ' kg in total');
-  const infin = !isFinite(D.limits.vAllowMean);
-  const strapLim = !!(sp && sp.active && sp.inCheck && D.eq.capped);
-  setText('tAllowK', strapLim ? 'Within the strap rating up to' : 'Holds, with margin, up to');
-  setText('tTipK', strapLim ? 'Straps reach their rating at' : (D.gov === 'S' ? 'Stage and wall tip at' : 'Tips over at'));
-  $('tAllow').firstChild.textContent = infin ? '∞' : nf1(D.limits.vAllowMean);
-  setText('tAllowS', infin ? 'no wind load' : 'scale ' + M.beaufort(D.limits.vAllowMean) + ' · ' + nf0(kmh(D.limits.vAllowMean)) + ' km/h' + (outdoor && S.gust > 0 ? ' mean' : ''));
-  $('tTip').firstChild.textContent = infin ? '∞' : nf1(D.limits.vCritMean);
-  setText('tTipS', infin ? 'no wind load' : 'scale ' + M.beaufort(D.limits.vCritMean) + ' · ' + nf0(kmh(D.limits.vCritMean)) + ' km/h' + (outdoor && S.gust > 0 ? ' mean' : ''));
+  const lv = limitView();
+  setText('limH', isWind ? 'Ballast and wind limits' : 'Ballast and load limits');
+  setText('tAllowK', lv.kAllow); setText('tTipK', lv.kTip);
+  $('tAllow').firstChild.textContent = lv.infin ? '∞' : lv.allow; $('tAllow').querySelector('small').textContent = lv.infin ? '' : lv.unit;
+  setText('tAllowS', lv.infin ? lv.none : lv.allowS);
+  $('tTip').firstChild.textContent = lv.infin ? '∞' : lv.crit; $('tTip').querySelector('small').textContent = lv.infin ? '' : lv.unit;
+  setText('tTipS', lv.infin ? lv.none : lv.critS);
 
-  renderBend(); renderMoments(); renderChecks(); renderSheet(); renderTables();
-  setText('planInfo', nf0(w.cn * 100) + '% pushes the screen · ' + nf0(Math.abs(w.sinT) * 100) + '% slides along it');
+  renderBend(); renderMoments(); renderChecks(); renderSheet(); renderTables(); renderIndoor();
+  setText('planInfo', isWind ? nf0(w.cn * 100) + '% pushes the screen · ' + nf0(Math.abs(w.sinT) * 100) + '% slides along it'
+    : kindL === 'force' ? (S.knock.from === 'both' ? 'the push is checked from the front and from the rear' : 'push from the ' + S.knock.from)
+    : 'the floor moves front to back; the wall tips whichever way is weaker');
+  setText('planCap', isWind ? 'Wind direction' : kindL === 'force' ? 'Push direction' : 'Shaking direction');
+  setText('planSub', isWind ? 'drag the arrow' : '');
+  const axx = axisOf(st);
+  setText('mapSub', axx.sub); setText('mapTh1', axx.th1); setText('mapTh2', axx.th2);
   setText('rearSub', S.ballastAuto ? 'seen from behind · click a base' : 'seen from behind · click a base, or drag a bar');
   const exagNow = bendExag(D, ui.exag);
   setText('frontSub', ui.exag === 'true' ? 'true scale: real proportions' : 'bending drawn ×' + nf0(exagNow) + ' so you can see it');
   $('frontLegend').textContent = '';
   const lg = (txtv, col) => { const s2 = el('span'); const i = el('i'); i.style.background = col; s2.appendChild(i); s2.append(txtv); $('frontLegend').appendChild(s2); };
-  lg('LED face', 'var(--c-screen)'); if (stg) lg('Stage', '#8a97a8'); if (sp) lg(RT[sp.type], '#ffb020'); lg('Wind', '#d6409f');
+  lg('LED face', 'var(--c-screen)'); if (stg) lg('Stage', '#8a97a8'); if (sp) lg(RT[sp.type], '#ffb020'); lg(isWind ? 'Wind' : kindL === 'force' ? 'Push' : 'Shaking', '#d6409f');
+  setText('legForce', isWind ? 'Wind force' : kindL === 'force' ? 'Push' : 'Inertia force');
+}
+
+/* ------------------------------------------------------------------ indoor loads: wording, limits, comparison */
+const PKW = () => (D.loadKind === 'wind' ? 'peak wind' : 'peak load');
+const swayG = () => Math.pow(2 * Math.PI * S.sway.f, 2) * S.sway.amp / 1000 / M.G;               // peak acceleration of the deck, in g
+const floorAmp = () => (S.mode === 'indoor' && S.indoorCase === 'quake' ? S.quake.floor : 1);
+const SIDE_TXT = () => (D.dir === 'rear' ? 'forward, about the front toe under the screen' : 'backward, about the rear toe');
+const zonesHeld = (allowG) => { const held = M.QUAKE_ZONES.filter((z) => allowG >= z.g - 1e-9); return held.length ? 'holds Greek zone ' + held[held.length - 1].zone : 'is below zone I'; };
+function loadSummary(id) {
+  switch (id) {
+    case 'draught': return 'Beaufort ' + S.indoorScale + ' · ' + M.SCALE[S.indoorScale].v + ' m/s';
+    case 'door': return nf1(S.door.v) + ' m/s for ' + nf1(S.door.dur) + ' s';
+    case 'knock': return nf0(S.knock.kgf) + ' kgf at ' + nf1(S.knock.h) + ' m, shared by ' + S.knock.share;
+    case 'sway': return nf1(S.sway.amp) + ' mm at ' + nf1(S.sway.f) + ' Hz · ' + nf3(swayG()) + ' g';
+    case 'quake': return nf2(S.quake.pga) + ' g' + (S.quake.floor > 1.001 ? ', upper floor ×' + nf2(S.quake.floor) : ', ground floor');
+    default: return nf1(S.notional.pct) + '% of the weight, sideways';
+  }
+}
+function limitView() {
+  const L = D.limits, sp = D.strap;
+  const strapLim = !!(sp && sp.active && sp.inCheck && D.eq.capped);
+  const kAllow = strapLim ? 'Within the strap rating up to' : 'Holds, with margin, up to';
+  const kTip = strapLim ? 'Straps reach their rating at' : (D.gov === 'S' ? 'Stage and wall tip at' : 'Tips over at');
+  if (L.kind === 'speed') {
+    const gustMean = S.mode === 'outdoor' && S.gust > 0, bft = (v) => 'Beaufort ' + M.beaufort(v) + ' · ' + nf0(kmh(v)) + ' km/h' + (gustMean ? ' mean' : '');
+    return { infin: !isFinite(L.vAllowMean), kAllow, kTip, unit: 'm/s', allow: nf1(L.vAllowMean), crit: nf1(L.vCritMean), allowS: bft(L.vAllowMean), critS: bft(L.vCritMean), none: 'no wind load',
+      critFull: nf1(L.vCritMean) + ' m/s' + (gustMean ? ' mean wind' : '') + ' (Beaufort ' + M.beaufort(L.vCritMean) + ')' };
+  }
+  if (L.kind === 'force') {
+    const at = 'at ' + nf1(S.knock.h) + ' m up';
+    return { infin: !isFinite(L.allow), kAllow: 'Holds, with margin, a push of', kTip, unit: 'kgf', allow: nf0(L.allow), crit: nf0(L.crit), allowS: at, critS: at, none: 'no push',
+      critFull: nf0(L.crit) + ' kgf ' + at };
+  }
+  const fa = floorAmp(), pct = S.indoorCase === 'notional';
+  const val = (x) => (pct ? nf1(x * 100) : nf(x / fa, x / fa < 0.1 ? 3 : 2)), unit = pct ? '%' : 'g';
+  let allowS = pct ? 'of the weight, sideways' : fa > 1.001 ? 'at the ground, ' + nf2(fa) + '× on this floor' : 'at the ground';
+  let critS = allowS;
+  if (S.indoorCase === 'sway') {
+    const mm = (g) => nf1(g * M.G / Math.pow(2 * Math.PI * S.sway.f, 2) * 1000);
+    allowS = 'deck moves ' + mm(L.allow) + ' mm at ' + nf1(S.sway.f) + ' Hz'; critS = 'deck moves ' + mm(L.crit) + ' mm at ' + nf1(S.sway.f) + ' Hz';
+  } else if (S.indoorCase === 'quake') allowS += ' · ' + zonesHeld(L.allow / fa);
+  return { infin: !isFinite(L.allow), kAllow, kTip, unit, allow: val(L.allow), crit: val(L.crit), allowS, critS, none: 'no shaking',
+    critFull: val(L.crit) + (pct ? '% of the weight' : ' g' + (fa > 1.001 ? ' at the ground' : '')) };
+}
+function dynNote(cs) {
+  return { door: 'The animation shows what a gust of this length really does: a short one can lift the wall and leave it standing.',
+    knock: 'The safety factor treats the push as steady. A short push can lift the wall and leave it standing, as the animation shows.',
+    sway: 'The safety factor holds the worst moment of the shake steady. The animation shows the wall rocking and whether it keeps going.',
+    quake: 'The safety factor is the usual force-coefficient check. The animation uses one earthquake-like record, so it shows what could happen, not what will.' }[cs] || '';
+}
+function indoorVerdict(status, avg) {
+  const cs = D.loadCase, sp = D.strap, stg = D.stage, lv = limitView();
+  const noun = { door: 'the gust', knock: 'the push', sway: 'the sway', quake: 'the earthquake', notional: 'the code load' }[cs] || 'the load';
+  const where = D.both ? ' The weaker way is to tip ' + SIDE_TXT() + '.' : '';
+  const stgTxt = stg && D.gov === 'S' ? ' With the stage, ' + govText() + '.' : '';
+  const tipsWhere = D.gov === 'S' ? govText() : D.both ? 'it tips ' + SIDE_TXT() : govText();
+  let msg;
+  if (D.F.N < 1e-6) return 'Nothing pushes on the wall: the load is zero.';
+  if (status === 'stable') {
+    msg = (D.req.none ? 'The weight of the screen and frame' + (stg ? ', the stage' : '') + (sp ? ' and your straps' : '') + ' alone covers ' + noun + ' with the margin you asked for. ' : '') +
+      'With ' + nf1(avg) + ' kg on each of ' + D.N + ' bases, the wall holds ' + sfTxt(D.SFact) + '× ' + noun + ' (you need ' + nf2(S.SF) + '×). It would start to tip at ' + lv.critFull + '.' + where + stgTxt;
+  } else if (status === 'marginal') {
+    msg = 'It will not tip, but it holds only ' + nf2(D.SFact) + '× ' + noun + ' and you need ' + nf2(S.SF) + '×.' + (D.req.capped ? '' : ' Add about ' + nf1(Math.max(0, D.req.per - avg)) + ' kg to each base, to ' + nf1(D.req.per) + ' kg.') + where + stgTxt;
+  } else {
+    msg = 'The wall tips: ' + noun + ' is ' + nf2(1 / D.SFact) + '× what holds it down, so ' + tipsWhere + '.' + (D.req.capped ? '' : ' It needs ' + nf1(D.req.per) + ' kg per base for your ' + nf2(S.SF) + '× margin.');
+  }
+  if (status !== 'stable' || cs === 'quake') msg += ' ' + dynNote(cs);
+  if (D.req.capped) msg += ' No amount of ballast fixes it in this layout (the solver stops at ' + nf0(M.MAX_BALLAST) + ' kg per base). Try the middle position, more bases, a deeper base, straps or a rear truss.';
+  return msg;
+}
+function renderIndoor() {
+  if (S.mode !== 'indoor') return;
+  const cs = S.indoorCase, wallW = D.Ws + D.Wf + D.Wb;
+  setHint('caseHint', {
+    draught: 'The sheet’s wind scale. Air in a hall hardly moves, so it really stands in for small sideways loads: at Beaufort ' + S.indoorScale + ' it pushes with ' + (cs === 'draught' ? nf1(100 * D.F.kgf / wallW) : '–') + '% of the wall’s weight. Building rules ask for about 2.5%.',
+    door: 'Air rushes in when a door opens, for a moment. It pushes on the whole screen like wind, so a gust that would tip a steady wall may only make it lift.',
+    knock: 'Someone leans on the wall, bumps it, or a trolley hits it. The push is at one height and the bases next to it help carry it.',
+    sway: 'The deck wobbles under dancers or a crowd. The wall moves with it, so every part is pushed by its own inertia, and the wall can tip either way.',
+    quake: 'The ground shakes. Greece designs for 0.16 g (zone I), 0.24 g (II) and 0.36 g (III), and upper floors shake harder. A tall wall on a shallow base is very sensitive.',
+    notional: 'The sideways load temporary-works rules ask for when nothing else is known: 2.5% of the weight, for out-of-plumb and rough handling.'
+  }[cs]);
+  if (cs === 'door') {
+    setText('DG-v', 'Beaufort ' + M.beaufort(S.door.v) + ' · ' + nf0(kmh(S.door.v)) + ' km/h');
+    setHint('DG-h', nf0(0.625 * S.door.v * S.door.v) + ' N/m² on the screen, ' + nf1(Math.pow(S.door.v / 3.3, 2)) + '× the sheet’s draught at Beaufort 2 (3.3 m/s). Air measured in doorways is mostly 0.5 to 2.5 m/s, more with a wind outside.');
+    setHint('DD-h', 'The safety factor assumes the gust never ends. For ' + nf1(S.door.dur) + ' s the wall may only rock: watch the animation.');
+  }
+  if (cs === 'knock') {
+    setText('KG-v', nf0(S.knock.kgf * M.G) + ' N');
+    setHint('KG-h', 'A standing worker pushes with up to about 23 kgf using the whole body, and up to about 70 kgf braced against something (CCOHS).');
+    setHint('KS-h', 'The push is carried by ' + S.knock.share + ' of ' + D.N + ' bases, about ' + nf1(S.knock.share * D.spacing) + ' m of wall, and the rest of the wall helps in proportion.');
+  }
+  if (cs === 'sway') {
+    setText('SA-v', nf(swayG(), 3) + ' g peak');
+    setHint('SA-h', 'The deck moves ' + nf1(S.sway.amp) + ' mm each way at ' + nf1(S.sway.f) + ' Hz, so the wall feels ' + nf(swayG(), 3) + ' g. This wall tips at ' + (isFinite(D.limits.crit) ? nf(D.limits.crit, 3) : '∞') + ' g.' +
+      (S.sway.bounce > 0 ? ' Up and down shaking of ' + nf2(S.sway.bounce) + ' g makes it lighter at the peaks.' : ''));
+  }
+  if (cs === 'quake') {
+    const fa = S.quake.floor;
+    setText('QP-v', nf2(S.quake.pga) + ' g');
+    setText('QF-v', fa < 1.02 ? 'ground floor' : '×' + nf2(fa));
+    setHint('QP-h', 'Greek zones: I 0.16 g, II 0.24 g, III 0.36 g. With your margin this wall ' + zonesHeld(D.limits.allow / fa) + '; it tips at ' + (isFinite(D.limits.crit) ? nf(D.limits.crit / fa, 3) : '∞') + ' g at the ground.' + (fa > 1.02 ? ' An upper floor shakes ' + nf2(fa) + '× harder (EN 1998-1, rigid element up to 2.5×).' : ''));
+  }
+  if (cs === 'notional') setHint('NP-h', nf0(D.F.kgf) + ' kgf sideways on this wall. The sheet’s draught at Beaufort 2 is about 2% of its weight, close to this rule.');
+
+  // every case side by side, on the ballast now on the bases
+  const rows = M.compareCases(S, D), host = $('cmpRows'); host.textContent = '';
+  let most = rows[0]; for (const r of rows) if (!r.capped && r.req > most.req || (r.capped && !most.capped)) most = r;
+  for (const r of rows) {
+    const tr = el('tr'); tr.dataset.id = r.id; tr.tabIndex = 0; tr.setAttribute('aria-selected', String(r.id === cs));
+    const td0 = el('td'); td0.appendChild(document.createTextNode(r.name)); td0.appendChild(el('small', null, loadSummary(r.id)));
+    const sf = el('td', 'sf', r.SF === Infinity ? '∞' : sfTxt(r.SF) + '×'); sf.dataset.s = r.status;
+    const nd = el('td', null, r.none ? '0' : r.capped ? '> ' + nf0(M.MAX_BALLAST) : nf(r.req, 1));
+    if (r === most && !r.none) nd.appendChild(el('span', 'gov', 'most'));
+    tr.appendChild(td0); tr.appendChild(sf); tr.appendChild(nd); host.appendChild(tr);
+  }
+  setText('cmpHint', 'Click a row to play that load. “Needs” is the ballast per base for ' + nf2(S.SF) + '× on its own, with the ballast where it works best. The ' + (most.none ? 'weight alone covers every case.' : most.name.toLowerCase() + ' asks for the most.'));
 }
 
 function renderBend() {
@@ -2835,64 +3531,79 @@ function renderBend() {
     setText('bStrapS', sp.active ? nf0(sp.util * 100) + '% of ' + nf0(sp.TcapKg) + ' kg' + (sp.anchorLimited ? ' (anchor limit)' : ' rating') + ' · ' + sp.n + ' across' : 'wrong side for this wind: slack');
   }
   $('bLift').firstChild.textContent = nf(b.lift, b.lift < 10 ? 1 : 0);
-  setText('bLiftS', b.phi > 1e-6 ? 'tilted ' + nf(b.phi * 180 / Math.PI, 2) + '° at the peak wind' : 'sits flat at the peak wind');
+  setText('bLiftS', b.phi > 1e-6 ? 'tilted ' + nf(b.phi * 180 / Math.PI, 2) + '° at the ' + PKW() + '' : 'sits flat at the ' + PKW() + '');
   $('bendStrapKey').hidden = !(sp && sp.active);
   setText('bendNote', 'The top moves most, but the bending moment is greatest at the base, which is where seams open. ' + (sp ? 'The ' + RT_NAME(sp.type) + ' takes ' + nf0(Math.min(100, (sp.Ph / Math.max(D.F.N, 1)) * 100)) + '% of the wind force and cuts both.' : 'A strap near the top would cut both.'));
 }
 function RT_NAME(t) { return { strap: 'strap', cable: 'cable', truss: 'truss' }[t]; }
 
 function renderMoments() {
+  const lw = D.loadKind === 'wind' ? 'wind' : D.loadKind === 'force' ? 'push' : 'shaking', LW = lw.charAt(0).toUpperCase() + lw.slice(1);
+  setText('momK', LW + ' × safety factor');
   const mx = Math.max(D.M.wSF, D.M.rest, 1e-9) * 1.02;
   const seg = (host, parts, total) => {
     host.textContent = ''; host.style.width = clamp(total / mx, 0, 1) * 100 + '%';
     for (const p of parts) if (p.v > 1e-9) { const i = el('i'); i.style.flex = p.v + ' 1 0'; i.style.background = p.c; i.title = p.t + ' ' + nf1(p.v) + ' kg·m'; host.appendChild(i); }
   };
-  seg($('momWind'), [{ v: D.M.w, c: 'var(--ink2)', t: 'Wind' }, { v: D.M.wSF - D.M.w, c: 'var(--ink3)', t: 'Safety margin' }], D.M.wSF);
+  seg($('momWind'), [{ v: D.M.w, c: 'var(--ink2)', t: LW }, { v: D.M.wSF - D.M.w, c: 'var(--ink3)', t: 'Safety margin' }], D.M.wSF);
   seg($('momRest'), [{ v: D.M.s, c: 'var(--c-screen)', t: 'Screen' }, { v: D.M.b, c: 'var(--c-ballast)', t: 'Ballast' }, { v: D.M.f, c: 'var(--c-frame)', t: 'Frame' }, { v: D.M.stage, c: '#8a97a8', t: 'Stage' }, { v: D.M.strap, c: '#ffb020', t: 'Straps' }], D.M.rest);
   setText('mWind', nf1(D.M.wSF)); setText('mRest', nf1(D.M.rest));
   setText('kScreen', nf1(D.M.s)); setText('kBallast', nf1(D.M.b)); setText('kFrame', nf1(D.M.f)); setText('kStage', nf1(D.M.stage)); setText('kStrap', nf1(D.M.strap));
   $('kStageWrap').hidden = !D.stage; $('kStrapWrap').hidden = !D.strap;
   const eq = $('eq'); eq.textContent = '';
   const ln = (a) => { eq.appendChild(el('div', null, a)); };
-  ln('wind ' + nf1(D.M.w) + ' × ' + nf2(S.SF) + ' = ' + nf1(D.M.wSF) + (D.gov === 'S' ? '  (about the stage edge)' : ''));
+  ln(lw + ' ' + nf1(D.M.w) + ' × ' + nf2(S.SF) + ' = ' + nf1(D.M.wSF) + (D.gov === 'S' ? '  (about the stage edge)' : ''));
   ln('screen ' + nf1(D.M.s) + ' + ballast ' + nf1(D.M.b) + ' + frame ' + nf1(D.M.f) + (D.stage && D.gov === 'S' ? ' + stage ' + nf1(D.M.stage) : '') + (D.strap ? ' + straps ' + nf1(D.M.strap) : '') + ' = ' + nf1(D.M.rest));
 }
 
 function renderChecks() {
   const ul = $('checks'); ul.textContent = '';
   const w = D.wind, sp = D.strap, stg = D.stage, b = D.bend;
+  const K = D.loadKind, isWindK = K === 'wind', lwd = isWindK ? 'wind' : K === 'force' ? 'push' : 'shaking';
   const add = (cls, html, small) => {
     const li = el('li', cls); li.appendChild(icon(ICON[cls])); const d = el('div'); const bb = el('span'); bb.textContent = html; d.appendChild(bb);
     if (small) { d.appendChild(document.createElement('br')); d.appendChild(el('small', null, small)); } li.appendChild(d); ul.appendChild(li);
   };
-  add(w.bft < 7 ? 'ok' : 'wn', w.bft < 7 ? 'Wind scale ' + w.bft + '. Within the sheet limit (below 7).' : 'Wind scale ' + w.bft + ' is above the sheet limit (below 7). Treat the result as a rough guide only.', 'Statement 1');
+  if (D.loadCase === 'draught' || D.loadCase === 'outdoor') add(w.bft < 7 ? 'ok' : 'wn', w.bft < 7 ? 'Beaufort ' + w.bft + '. Within the sheet limit (below 7).' : 'Beaufort ' + w.bft + ' is above the sheet limit (below 7). Treat the result as a rough guide only.', 'Statement 1');
   const rows = []; for (let r = 2; r <= D.rows; r += 2) rows.push(r); if (D.rows % 2 === 1) rows.push(D.rows);
   add('in', 'Tie each back frame to the screen at rows ' + rows.join(', ') + ' (every 2nd row, topmost included).', 'Statement 2 · the cyan connectors in the drawing' + (D.cabH === 0.5 ? ' · with 500 mm cabinets that is every 1 m' : ''));
   add(D.spacingOK ? 'ok' : 'wn', D.spacingOK ? 'Bases are ' + nf2(D.spacing) + ' m apart (at most 1 m, first and last column included).' : 'Bases are ' + nf2(D.spacing) + ' m apart. The sheet asks for a connection at least every 1 m, which means ' + D.sheetN + ' bases.', 'Statement 3');
-  add('in', D.dir === 'rear' ? 'Rear wind is the critical case. Keep the ballast at the rear end of each base, ' + nf(D.geom.aB, 3) + ' m behind the toe.' : 'Front wind: the screen’s own weight works with you (arm ' + nf(D.geom.aS, 3) + ' m). The sheet puts the ballast mid-base for this direction.', 'Statement 5');
+  if (isWindK) add('in', D.dir === 'rear' ? 'Rear wind is the critical case. Keep the ballast at the rear end of each base, ' + nf(D.geom.aB, 3) + ' m behind the toe.' : 'Front wind: the screen’s own weight works with you (arm ' + nf(D.geom.aS, 3) + ' m). The sheet puts the ballast mid-base for this direction.', 'Statement 5');
+  else {
+    if (D.both) {
+      const f = D.sides.fwd.SFact, bk = D.sides.back.SFact, lvl = (v) => (v >= S.SF - 1e-9 ? 'ok' : v >= 1 - 1e-9 ? 'wn' : 'bd');
+      add(lvl(Math.min(f, bk)), 'Tipping forward holds ' + sfTxt(f) + '×, tipping backward holds ' + sfTxt(bk) + '×. The ' + (f <= bk ? 'forward' : 'backward') + ' way is weaker' + (f <= bk ? ': the screen’s weight sits at the front toe, so it adds nothing there.' : '.'), 'Both ways are checked, because the floor or the push can come from either side');
+      add('in', 'The ballast sits ' + (D.posUsed === 'mid' ? 'in the middle of each base, which works both ways.' : 'at the rear end of each base, the best place against a forward tip.'), 'Position “Auto” tries both and keeps the better one');
+    } else add('in', D.dir === 'rear' ? 'A push from behind tips the wall forward about the front toe, under the screen.' : 'A push from the front tips the wall backward about the rear toe, so the screen’s weight works with you.', 'Ballast sits at the rear end for a rear push and mid-base for a front push, as in the sheet');
+    if (D.loadCase === 'quake') for (const z of M.QUAKE_ZONES) {
+      const ok = D.limits.allow / floorAmp() >= z.g - 1e-9;
+      add(ok ? 'ok' : 'bd', 'Greek zone ' + z.zone + ' (' + z.g + ' g): ' + (ok ? 'holds, with your margin.' : 'does not hold.'), 'Greek National Annex to Eurocode 8' + (floorAmp() > 1.02 ? ' · upper floor ×' + nf2(floorAmp()) : ''));
+    }
+    if (D.strap && (D.loadCase === 'knock' || D.loadCase === 'sway' || D.loadCase === 'quake')) add('wn', 'A sudden load can double the pull on a strap or cable. The static figures here do not show that.', 'Keep the strap rating well above the pull shown');
+  }
   if (D.req.none && !sp && !stg) add('ok', 'Required ballast is negative (' + nf1(D.req.totalRaw) + ' kg), so no extra ballast is needed.', 'Statement 6');
 
   if (stg) {
     const lw = D.lam.lamW, ls = D.lam.lamS;
-    add(Math.min(lw, ls) >= S.SF ? 'ok' : Math.min(lw, ls) >= 1 ? 'wn' : 'bd', 'Two ways to fail: the wall tipping on the deck holds ' + sfTxt(lw) + '×, the stage and wall tipping together hold ' + sfTxt(ls) + '×. ' + (D.gov === 'S' ? 'The stage governs.' : 'The wall governs.'), 'The wind acts ' + nf2(D.geom.hs + D.geom.hc) + ' m above the floor with the stage');
+    add(Math.min(lw, ls) >= S.SF ? 'ok' : Math.min(lw, ls) >= 1 ? 'wn' : 'bd', 'Two ways to fail: the wall tipping on the deck holds ' + sfTxt(lw) + '×, the stage and wall tipping together hold ' + sfTxt(ls) + '×. ' + (D.gov === 'S' ? 'The stage governs.' : 'The wall governs.'), 'The ' + lwd + ' acts ' + nf2(D.geom.hs + D.geom.hc) + ' m above the floor with the stage');
     add(stg.rearGap < 0 ? 'bd' : stg.rearGap < 0.2 ? 'wn' : 'ok', stg.rearGap < 0 ? 'The base overhangs the rear edge of the stage by ' + nf2(-stg.rearGap) + ' m.' : 'The rear of the base is ' + nf2(stg.rearGap) + ' m inside the stage edge.', 'Screen ' + nf2(stg.front) + ' m from the front edge');
     const dk = D.deck, ut = dk.local / dk.rating;
     add(ut < 0.8 ? 'ok' : ut <= 1 ? 'wn' : 'bd', 'Deck load under each base: about ' + nf0(dk.local) + ' kg/m² against ' + nf0(dk.rating) + ' kg/m² rated (' + nf0(ut * 100) + '%).' + (ut > 1 ? ' Spread the ballast with plywood or a beam, or use a stronger deck.' : ''), 'Base plate footprint about 1.1 × 0.45 m');
     const ss = D.slideStage;
-    add(ss.SF >= S.SF ? 'ok' : ss.SF >= 1 ? 'wn' : 'bd', 'Stage sliding on the floor: wind ' + nf0(ss.F) + ' N, friction (µ ' + nf2(ss.mu) + ') holds ' + nf0(ss.cap) + ' N, ' + sfTxt(ss.SF) + '×.' + (ss.SF < S.SF ? ' Strap or anchor the stage to the floor.' : ''), 'Extra check, not in the sheet');
+    add(ss.SF >= S.SF ? 'ok' : ss.SF >= 1 ? 'wn' : 'bd', 'Stage sliding on the floor: ' + lwd + ' ' + nf0(ss.F) + ' N, friction (µ ' + nf2(ss.mu) + ') holds ' + nf0(ss.cap) + ' N, ' + sfTxt(ss.SF) + '×.' + (ss.SF < S.SF ? ' Strap or anchor the stage to the floor.' : ''), 'Extra check, not in the sheet');
   }
   const sl = D.slide;
-  add(sl.SF >= S.SF ? 'ok' : sl.SF >= 1 ? 'wn' : 'bd', sl.F < 1e-6 ? 'Sliding: no sideways wind force.' : 'Wall sliding' + (stg ? ' on the deck' : '') + ': the wind pushes ' + nf0(sl.F) + ' N, friction (µ ' + nf2(sl.mu) + ') holds ' + nf0(sl.cap) + ' N, ' + sfTxt(sl.SF) + '×.' + (sl.SF < S.SF ? ' The sheet assumes friction is big enough, but it is not here.' : ''), 'Extra check, not in the sheet');
+  add(sl.SF >= S.SF ? 'ok' : sl.SF >= 1 ? 'wn' : 'bd', sl.F < 1e-6 ? 'Sliding: no sideways force.' : 'Wall sliding' + (stg ? ' on the deck' : '') + ': the ' + lwd + (isWindK ? ' pushes ' : ' force is ') + nf0(sl.F) + ' N, friction (µ ' + nf2(sl.mu) + ') holds ' + nf0(sl.cap) + ' N, ' + sfTxt(sl.SF) + '×.' + (sl.SF < S.SF ? ' The sheet assumes friction is big enough, but it is not here.' : ''), 'Extra check, not in the sheet');
 
   if (sp) {
     const util = sp.util;
-    if (!sp.active) add('wn', 'The ' + RT_NAME(sp.type) + 's are on the ' + sp.cfgSide + ' side, but the wind comes from the ' + D.dir + ', so they hang slack and do nothing.', 'Set "Pulls against wind from" or use a rear truss');
+    if (!sp.active) add('wn', 'The ' + RT_NAME(sp.type) + 's are on the ' + sp.cfgSide + ' side, but the ' + (isWindK ? 'wind' : 'load') + ' comes from the ' + D.dir + ', so they hang slack and do nothing.', 'Set "Pulls against wind from" or use a rear truss');
     else {
-      add(util < 0.6 ? 'ok' : util < 1 ? 'wn' : 'bd', sp.n + ' × ' + RT_NAME(sp.type) + ': pull ' + nf(sp.T / 1000, 2) + ' kN each at the peak wind, ' + nf0(util * 100) + '% of what each can take (' + nf0(sp.TcapKg) + ' kg' + (sp.anchorLimited ? ', limited by the anchor' : '') + ').', 'Rated load counts as the limit; breaking load is several times higher');
+      add(util < 0.6 ? 'ok' : util < 1 ? 'wn' : 'bd', sp.n + ' × ' + RT_NAME(sp.type) + ': pull ' + nf(sp.T / 1000, 2) + ' kN each at the ' + PKW() + ', ' + nf0(util * 100) + '% of what each can take (' + nf0(sp.TcapKg) + ' kg' + (sp.anchorLimited ? ', limited by the anchor' : '') + ').', 'Rated load counts as the limit; breaking load is several times higher');
       const ln = D.lean;
-      if (ln.hangs) add('bd', 'At the peak wind the wall leans ' + nf(ln.phi * 180 / Math.PI, 1) + '° and the base lifts ' + nf(ln.liftMm, 0) + ' mm. Past its tipping point only the ' + RT_NAME(sp.type) + 's are holding it up.', 'Add ballast so the base stays down');
-      else if (ln.liftMm > 25) add('wn', 'The base lifts ' + nf(ln.liftMm, 0) + ' mm at the rear at the peak wind before the ' + RT_NAME(sp.type) + ' takes over.', sp.type === 'strap' ? 'Webbing stretches; a steel cable or a truss catches it with almost no movement' : 'More ballast keeps the base down');
-      else if (ln.liftMm > 0.5) add('in', 'The base lifts ' + nf(ln.liftMm, 1) + ' mm at the rear at the peak wind before the ' + RT_NAME(sp.type) + ' takes over.', sp.type === 'strap' ? 'Webbing stretches; a steel cable or a truss catches it with almost no movement' : '');
+      if (ln.hangs) add('bd', 'At the ' + PKW() + ' the wall leans ' + nf(ln.phi * 180 / Math.PI, 1) + '° and the base lifts ' + nf(ln.liftMm, 0) + ' mm. Past its tipping point only the ' + RT_NAME(sp.type) + 's are holding it up.', 'Add ballast so the base stays down');
+      else if (ln.liftMm > 25) add('wn', 'The base lifts ' + nf(ln.liftMm, 0) + ' mm at the rear at the ' + PKW() + ' before the ' + RT_NAME(sp.type) + ' takes over.', sp.type === 'strap' ? 'Webbing stretches; a steel cable or a truss catches it with almost no movement' : 'More ballast keeps the base down');
+      else if (ln.liftMm > 0.5) add('in', 'The base lifts ' + nf(ln.liftMm, 1) + ' mm at the rear at the ' + PKW() + ' before the ' + RT_NAME(sp.type) + ' takes over.', sp.type === 'strap' ? 'Webbing stretches; a steel cable or a truss catches it with almost no movement' : '');
       if (S.rest.anchorKg > 0 && sp.anchorLimited) add('wn', 'The anchor blocks limit each ' + RT_NAME(sp.type) + ' to ' + nf0(sp.anchorLimKg) + ' kg, well under its rating of ' + nf0(S.rest.wll) + ' kg.', 'Heavier blocks or a fixed anchor raise it');
     }
     if (D.SFact >= 10) add('in', 'The straps take so much of the load that tipping stops being the limit. The frame, the cabinet connectors, the anchors and the floor are not checked here.', 'Ask the maker for the frame’s rated moment');
@@ -2907,11 +3618,12 @@ function renderChecks() {
 }
 
 function renderSheet() {
+  $('sheetBox').hidden = D.loadKind !== 'wind';                    // the sheet only knows wind
   const t = $('sheetTable'); t.textContent = '';
   const eff = D.wind.qPeak * D.wind.cn * S.Cf;
   const R = [
     ['h', 'Inputs'], ['Width of screen (m)', nf(S.W, 1), 'A4'], ['Height of screen (m)', nf(S.H, 1), 'B4'], ['Weight of cabinet (kg/m²)', nf(S.kgm2, 1), 'C4'],
-    ['Safety factor', nf2(S.SF), 'D4'], ['Wind scale', S.mode === 'indoor' ? String(S.indoorScale) : 'outdoor', 'E4'], ['Wind direction', D.dir, 'F4'],
+    ['Safety factor', nf2(S.SF), 'D4'], ['Wind scale (Beaufort)', S.mode === 'indoor' ? String(S.indoorScale) : 'outdoor', 'E4'], ['Wind direction', D.dir, 'F4'],
     ['h', 'Derived'], ['Columns of cabinets', nf0(D.cols), 'A7'], ['Rows of cabinets', nf0(D.rows), 'B7'], ['Wind pressure (N/m²)', nf(eff, 3), 'E7'], ['L, cabinet to ballast (m)', nf(D.geom.aB, 3), 'F7'],
     ['h', 'Weights (kg)'], ['Screen', nf(D.Ws, 1), 'B10'], ['Frame', nf(D.Wf, 1), 'C10'], ['Ballast needed', nf(D.req.totalRaw, 3), 'D10'], ['Wind force (kgf)', nf(D.F.kgf, 2), 'E10'],
     ['h', 'Arms of force (m)'], ['Screen', nf(D.geom.aS, 3), 'B11'], ['Frame', nf(D.geom.aF, 3), 'C11'], ['Ballast', nf(D.geom.aB, 3), 'D11'], ['Wind', nf(D.geom.hc, 2), 'E11'],
@@ -2939,32 +3651,44 @@ function renderTables() {
   const det = $('mapRows').closest('details');
   const mr = $('mapRows'); mr.textContent = '';
   if (det && !det.open) return;                                  // the map table needs a solve per row: only when it is on screen
-  const speeds = S.mode === 'indoor' ? M.SCALE.slice(0, 9).map((r) => r.v) : [2, 4, 6, 8, 10, 12, 15, 18, 21, 25, 30];
-  for (const v of speeds) {
-    const tr = el('tr'); tr.appendChild(el('td', null, nf1(v))); tr.appendChild(el('td', null, String(M.beaufort(v))));
-    tr.appendChild(el('td', null, nf(D.reqPerAtSpeed(v, S.SF), 1))); tr.appendChild(el('td', null, nf(D.reqPerAtSpeed(v, 1), 1)));
+  const ax = axisOf(st), windA = ax.kind === 'wind';
+  setText('mapTh1', ax.th1); setText('mapTh2', ax.th2);
+  const xs = windA ? (S.mode === 'indoor' ? M.SCALE.slice(0, 9).map((r) => r.v) : [2, 4, 6, 8, 10, 12, 15, 18, 21, 25, 30]) : [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4].map((k) => k * ax.x0);
+  const dec = ax.kind === 'force' ? 0 : ax.x0 < 1 ? 3 : 1;
+  for (const v of xs) {
+    const tr = el('tr'); tr.appendChild(el('td', null, windA ? nf1(v) : nf(v, dec))); tr.appendChild(el('td', null, windA ? String(M.beaufort(v)) : nf2(v / ax.x0) + '×'));
+    tr.appendChild(el('td', null, nf(reqAtAxis(D, ax, v, S.SF), 1))); tr.appendChild(el('td', null, nf(reqAtAxis(D, ax, v, 1), 1)));
     mr.appendChild(tr);
   }
 }
 
 /* ------------------------------------------------------------------ live HUD */
 let hudKey = '';
+function hudCells() {                          // the two live readouts at the top of the side view, for the load in play
+  const L = sim.lam, kind = D.loadKind, cs = D.loadCase;
+  if (kind === 'wind') { const vNow = D.wind.vPeak * sim.lastU; return [cs === 'door' ? 'Gust now' : 'Wind now', nf1(vNow) + ' m/s · Bft ' + M.beaufort(vNow), 'Force', nf0(D.F.kgf * sim.lastU * sim.lastU) + ' kgf']; }
+  if (kind === 'force') return ['Pushed from', Math.abs(L) < 0.02 ? '–' : 'the ' + (D.shake ? (L > 0 ? 'rear' : 'front') : D.dir), 'Push', nf0(S.knock.kgf * Math.abs(L)) + ' kgf'];
+  const aNow = L * D.rig.acc / M.G;                                                                 // g at the wall's base, + tips it forward
+  const c1 = cs === 'sway' ? ['Deck moves', nf1(S.sway.amp * sim.ground) + ' mm'] : cs === 'quake' ? ['Ground shakes', nf2(Math.abs(aNow) / S.quake.floor) + ' g'] : ['Load now', nf1(S.notional.pct * Math.abs(L)) + '%'];
+  return [c1[0], c1[1], 'Inertia force', nf0(D.F.kgf * Math.abs(L)) + ' kgf'];
+}
 function updateHud() {
-  const u = sim.lastU, vNow = D.wind.vPeak * u, force = D.F.kgf * u * u, deg = sim.phi * 180 / Math.PI;
+  const u = sim.lastU, deg = sim.phi * 180 / Math.PI, hc = hudCells();
   let s = D.status;
   if (sim.toppled) s = sim.phi > 1.2 ? 'toppled' : 'falling'; else if (sim.phi > 0.0004) s = 'rocking';
   const text = { stable: 'Stable', marginal: 'Marginal', tipping: 'Will tip', toppled: 'Toppled', falling: 'Falling', rocking: 'Rocking' }[s];
   const nodes = st.nodesNow || bendNow(D, sim), Kn = nodes.length - 1;
-  const topNow = (nodes[Kn] + sim.phi * (D.geom.L + (D.gov === 'S' ? D.geom.hs : 0))) * (D.dir === 'rear' ? 1 : -1);
+  const tiltTop = sim.phi * (D.geom.L + (D.gov === 'S' ? D.geom.hs : 0));
+  const topNow = D.shake ? Math.abs(nodes[Kn]) + tiltTop : (nodes[Kn] + tiltTop) * (D.dir === 'rear' ? 1 : -1);
   const topMm = Math.abs(topNow) * 1000;
   const sp = D.strap, Tn = sp ? sim.Ph / (sp.cb * sp.n) : 0;
-  const key = [s, nf1(vNow), nf0(force), deg.toFixed(2), sim.liftMM(D.geom.depth).toFixed(0), topMm.toFixed(topMm < 10 ? 1 : 0), Tn.toFixed(0), sim.broken].join('|');
+  const key = [s, hc.join('~'), deg.toFixed(2), sim.liftMM(D.geom.depth).toFixed(0), topMm.toFixed(topMm < 10 ? 1 : 0), Tn.toFixed(0), sim.broken].join('|');
   if (key === hudKey) return; hudKey = key;
   const pill = $('pill'); pill.dataset.s = s === 'rocking' ? 'marginal' : s === 'falling' ? 'toppled' : s;
   $('btnReplay').classList.toggle('attn', s === 'toppled');
   pill.querySelector('use').setAttribute('href', s === 'stable' ? '#i-check' : s === 'marginal' || s === 'rocking' ? '#i-warn' : '#i-x');
   setText('pillText', text);
-  setText('liveWind', nf1(vNow) + ' m/s'); setText('liveForce', nf0(force) + ' kgf');
+  setText('liveWindK', hc[0]); setText('liveWind', hc[1]); setText('liveForceK', hc[2]); setText('liveForce', hc[3]);
   setText('liveTilt', deg < 10 ? deg.toFixed(2) + '°' : deg.toFixed(0) + '°');
   const topTxt = topMm < 10 ? nf(topMm, 1) + ' mm' : topMm < 1000 ? nf0(topMm) + ' mm' : nf(topMm / 1000, 2) + ' m';
   setText('liveTop', topTxt); setText('fTop', topTxt);
@@ -2994,7 +3718,7 @@ function initPointers() {
 
   const plan = $('plan'); let dragD = false;
   const setDir = (e) => {
-    const h = hits.plan; if (!h) return; const p = ptr(e, plan), dx = p.x - h.cx, dy = p.y - h.cy;
+    const h = hits.plan; if (!h || D.loadKind !== 'wind') return; const p = ptr(e, plan), dx = p.x - h.cx, dy = p.y - h.cy;
     if (Math.hypot(dx, dy) < 10) return;
     let deg = Math.atan2(dx, -dy) * 180 / Math.PI; deg = (deg + 360) % 360;
     deg = Math.round(deg / 5) * 5; for (const m of [0, 90, 180, 270]) if (Math.abs(deg - m) <= 4) deg = m;
@@ -3008,8 +3732,14 @@ function initPointers() {
   const map = $('map'), tip = $('mapTip'); let dragM = false;
   const setMap = (e) => {
     const h = hits.map; if (!h) return; const p = ptr(e, map); let v = hits.vAt(p.x);
-    if (S.mode === 'indoor') { let best = 0; M.SCALE.forEach((r, i) => { if (Math.abs(r.v - v) < Math.abs(M.SCALE[best].v - v)) best = i; }); S.indoorScale = best; }
-    else S.outSpeed = Math.round(v * 2) / 2;
+    if (h.ax.kind === 'wind') {
+      if (S.mode === 'indoor' && S.indoorCase === 'door') S.door.v = Math.round(v * 10) / 10;
+      else if (S.mode === 'indoor') { let best = 0; M.SCALE.forEach((r, i) => { if (Math.abs(r.v - v) < Math.abs(M.SCALE[best].v - v)) best = i; }); S.indoorScale = best; }
+      else S.outSpeed = Math.round(v * 2) / 2;
+    } else if (S.indoorCase === 'knock') S.knock.kgf = Math.round(v);
+    else if (S.indoorCase === 'sway') S.sway.amp = Math.round(v * M.G / Math.pow(2 * Math.PI * S.sway.f, 2) * 2000) / 2;
+    else if (S.indoorCase === 'quake') S.quake.pga = Math.max(0.01, Math.round(v * 100) / 100);
+    else S.notional.pct = Math.max(0.1, Math.round(v * 10) / 10);
     const kg = hits.kgAt(p.y); setBallastAll(kg < 0.4 ? 0 : kg);
     update();
   };
@@ -3023,9 +3753,9 @@ function initPointers() {
     const h = hits.map; if (!h) return;
     if (p.x < h.padL || p.x > h.padL + h.pw || p.y < h.padT - 4 || p.y > h.padT + h.ph + 4) { leaveMap(); return; }
     hits.hoverV = hits.vAt(p.x); dirty.map = true;
-    const v = hits.hoverV, r1 = D.reqPerAtSpeed(v, S.SF), r0 = D.reqPerAtSpeed(v, 1), sf = v > 0 ? D.SFact * Math.pow(D.wind.vMean / v, 2) : Infinity, avg = D.Wb / D.N;
+    const v = hits.hoverV, ax = h.ax, r1 = reqAtAxis(D, ax, v, S.SF), r0 = reqAtAxis(D, ax, v, 1), sf = sfAtAxis(D, ax, v), avg = D.Wb / D.N;
     tip.textContent = '';
-    const t = el('div', 't', 'Mean wind ' + nf1(v) + ' m/s · scale ' + M.beaufort(v * D.wind.pk)); tip.appendChild(t);
+    const t = el('div', 't', axisTitle(ax, v)); tip.appendChild(t);
     const row = (a, b, c) => { const d = el('div', 'r'); d.appendChild(el('span', null, a)); const bb = el('b', null, b); if (c) bb.style.color = c; d.appendChild(bb); tip.appendChild(d); };
     const T = theme();
     row('Needed for ' + nf2(S.SF) + '×', nf1(r1) + ' kg', T.goodInk); row('Tips below', nf1(r0) + ' kg', T.critInk); row('You have', nf1(avg) + ' kg'); row('Safety factor here', sf === Infinity ? '∞' : sfTxt(sf) + '×');
@@ -3064,7 +3794,7 @@ function frame(now) {
     let n = 0; while (acc >= SUB && n < 260) { sim.step(SUB); acc -= SUB; n++; }
     if (acc > SUB * 260) acc = 0;
     st.t += dt;
-    if (st.V) advanceScene(dt, D.wind.vPeak * sim.lastU * D.wind.cn, D.dir === 'rear' ? 1 : -1, st.V);
+    if (st.V) advanceScene(dt, D.loadKind === 'wind' ? D.wind.vPeak * sim.lastU * D.wind.cn : 0, D.dir === 'rear' ? 1 : -1, st.V);
   }
   ui.camAz += (ui.camTAz - ui.camAz) * 0.14; ui.camEl += (ui.camTEl - ui.camEl) * 0.14;
   safe('side', () => drawSide($('side'), st));
@@ -3086,6 +3816,7 @@ function init() {
   try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', themeChanged); } catch (e) { /* older browsers */ }
   new MutationObserver(themeChanged).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] });
   window.__led = { S, sim, ui, hits, st, get D() { return D; }, M, update, loadScenario,
+    redraw() { drawSide($('side'), st); drawFront($('front'), st); drawPlan($('plan'), st, hits); drawRear($('rear'), st, hits); drawMap($('map'), st, hits); drawBend($('bendC'), st); updateHud(); },
     bench(n) { n = n || 30; const t0 = performance.now(); for (let i = 0; i < n; i++) { drawSide($('side'), st); drawFront($('front'), st); drawPlan($('plan'), st, hits); } const t1 = performance.now(); for (let i = 0; i < n; i++) { drawMap($('map'), st, hits); drawRear($('rear'), st, hits); drawBend($('bendC'), st); } const t2 = performance.now(); const t3 = performance.now(); for (let i = 0; i < n; i++) { M.derive(S); } const t4 = performance.now(); return { perFrameMs: (t1 - t0) / n, perDirtyMs: (t2 - t1) / n, deriveMs: (t4 - t3) / n }; } };
   requestAnimationFrame(frame);
 }

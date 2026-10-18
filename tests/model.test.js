@@ -145,6 +145,93 @@ r = run('same + stage 1.2 m', base({ mode: 'outdoor', outSpeed: 14, gust: 0.4, b
 r = run('tall light stage, outdoor 13 m/s', base({ mode: 'outdoor', outSpeed: 13, ballastAuto: false, ballastPer: 400, stage: { on: true, h: 2.5, depth: 2.5, extra: 0, front: 0.3, deckKgm2: 10, rating: 750, muDeck: 0.4, muFloor: 0.5 } }));
 ok('stage + wall topple together', r.D.gov === 'S' && r.sim.toppled);
 
+/* ---- 9. Beaufort: picking a force uses the top of its range, like the sheet's wind table ---- */
+for (let n = 0; n <= 12; n++) eq('Beaufort ' + n + ' maps back to itself', M.beaufort(M.BFT_SPEED[n]), n);
+for (let n = 0; n <= 10; n++) eq('sheet scale ' + n + ' speed is the top of Beaufort ' + n, M.SCALE[n].v, M.BFT_SPEED[n]);
+eq('13.8 m/s is still force 6', M.beaufort(13.8), 6); eq('13.9 m/s is force 7', M.beaufort(13.9), 7);
+ok('force 6 runs 10.8 to 13.8 m/s', M.bftRange(6).lo === 10.8 && M.bftRange(6).hi === 13.8, JSON.stringify(M.bftRange(6)));
+ok('force 1 runs 0.3 to 1.5 m/s', M.bftRange(1).lo === 0.3 && M.bftRange(1).hi === 1.5, JSON.stringify(M.bftRange(1)));
+ok('force 12 has no top', M.bftRange(12).lo === 32.7 && M.bftRange(12).hi === null, JSON.stringify(M.bftRange(12)));
+for (let n = 1; n <= 12; n++) ok('force ' + n + ' starts just above force ' + (n - 1), Math.abs(M.bftRange(n).lo - (M.bftRange(n - 1).hi + 0.1)) < 1e-9, JSON.stringify([M.bftRange(n - 1), M.bftRange(n)]));
+for (let n = 1; n <= 10; n++) {   // outdoors at the top of a force gives the sheet's pressure for that row, to the table's rounding
+  const W = M.windInfo(base({ mode: 'outdoor', gust: 0, outSpeed: M.BFT_SPEED[n] }));
+  ok('outdoor Beaufort ' + n + ' pressure matches the sheet row', Math.abs(W.qMean - M.SCALE[n].q) < 0.06, [W.qMean, M.SCALE[n].q]);
+}
+
+/* ---- 10. indoor loads other than wind: door gust, knock, stage sway, earthquake, code minimum ---- */
+{
+  const sheetBal = { ballastAuto: false, ballastPer: 9.055, ballastPos: 'rear' };
+  const a = M.derive(base()), b = M.derive(base({ indoorCase: 'draught' }));
+  eq('the draught case is the sheet', b.SFact, a.SFact); eq('the draught case needs the sheet ballast', b.req.per, a.req.per);
+  const dg = M.derive(base({ indoorCase: 'door', door: { v: 3.3, dur: 2 } }));
+  ok('a door gust at 3.3 m/s needs the sheet ballast (the table rounds 6.806 to 6.8 N/m2)', Math.abs(dg.req.per - a.req.per) / a.req.per < 0.005, [dg.req.per, a.req.per]);
+
+  // code minimum 2.5% of the weight, ballast at the rear end: SF*acc*sum(m*eta) = g*sum(m*xi), solved by hand for the forward tip
+  const Sn = base({ indoorCase: 'notional', ballastPos: 'rear' }), Dn = M.derive(Sn);
+  const a0 = 0.025, etaW = 0.1 + Sn.H / 2, etaB = 0.1 + 0.12, xiF = 0.46, xiB = 0.862;
+  const Bt = (Sn.SF * a0 * (Dn.Ws + Dn.Wf) * etaW - Dn.Wf * xiF) / (xiB - Sn.SF * a0 * etaB);
+  eq('code minimum: ballast from the moment balance', Dn.sides.fwd.req.total, Bt, 1e-6);
+  ok('the screen sits at the front toe, so forward is the weak side', Dn.dir === 'rear' && Dn.sides.fwd.SFact < Dn.sides.back.SFact, [Dn.sides.fwd.SFact, Dn.sides.back.SFact]);
+  eq('reported safety factor is the weaker side', Dn.SFact, Math.min(Dn.sides.fwd.SFact, Dn.sides.back.SFact));
+
+  // sway: acceleration = (2 pi f)^2 * amplitude; twice the amplitude halves the safety factor; a 20% bounce lowers it by 20%
+  const sw = (o) => M.derive(base(Object.assign({ indoorCase: 'sway', ballastAuto: false, ballastPer: 60, ballastPos: 'rear' }, o)));
+  const s0 = sw({ sway: { amp: 5, f: 1.5, bounce: 0 } }), s2 = sw({ sway: { amp: 10, f: 1.5, bounce: 0 } }), sb = sw({ sway: { amp: 5, f: 1.5, bounce: 0.2 } });
+  eq('sway acceleration', M.loadFor(base({ indoorCase: 'sway' }), 'sway', 'rear').acc, Math.pow(2 * Math.PI * 1.5, 2) * 0.005, 1e-12);
+  eq('twice the sway halves the safety factor', s2.sides.fwd.SFact, s0.sides.fwd.SFact / 2, 1e-9);
+  eq('a 20% bounce lowers the safety factor by 20%', sb.sides.fwd.SFact / s0.sides.fwd.SFact, 0.8, 1e-9);
+  eq('quake: a vertical shake of half the horizontal', M.loadFor(base({ indoorCase: 'quake' }), 'quake', 'rear').gs, 1 - 0.5 * 0.24, 1e-12);
+
+  // knock: the push is carried by `share` bases, so more sharing holds proportionally better
+  const kn = (share) => M.derive(base({ indoorCase: 'knock', knock: { kgf: 40, h: 1.2, from: 'rear', dur: 0.3, share }, ballastAuto: false, ballastPer: 9.055, ballastPos: 'rear' }));
+  eq('a push shared by 4 bases holds twice as well as by 2', kn(4).SFact, 2 * kn(2).SFact, 1e-9);
+  ok('a push from the front is the easy one (the wall tips backward, onto its screen)', M.derive(base({ indoorCase: 'knock', knock: { kgf: 40, h: 1.2, from: 'front', dur: 0.3, share: 2 } })).req.per < M.derive(base({ indoorCase: 'knock', knock: { kgf: 40, h: 1.2, from: 'rear', dur: 0.3, share: 2 } })).req.per);
+
+  // from either side the ballast position matters: at the rear end it sits on the rear pivot, so Auto goes to the middle for a quake
+  const qa = M.derive(base({ indoorCase: 'quake' }));
+  ok('auto position moves the ballast to the middle for a quake', qa.posUsed === 'mid', qa.posUsed);
+  eq('auto ballast for the quake reaches the required safety factor', qa.SFact, 1.5, 1e-6);
+  ok('the quake needs far more than the sheet draught', qa.req.per > 20 * a.req.per, qa.req.per);
+  eq('sfOf at the ballast in use gives the weaker way back', qa.sfOf(qa.Wb), qa.SFact, 1e-9);
+  eq('and so does the load-based requirement at the load in use', qa.reqPerAtLoad(0.24, 1.5, 0.24), qa.req.per, 1e-6);
+
+  // the comparison table
+  const cmp = M.compareCases(base(), a);
+  ok('six cases, in order', cmp.map((c) => c.id).join() === M.CASES.join());
+  eq('draught row, on the sheet ballast', cmp[0].SF, 1.5, 1e-9);
+  ok('a 5.4 m/s door gust needs more than the draught', cmp[1].req > cmp[0].req && cmp[1].SF < cmp[0].SF);
+
+  // the record behind the earthquake animation
+  const rec = M.makeRecord(1, 12);
+  let pk = 0, pd = 0; for (const v of rec.acc) pk = Math.max(pk, Math.abs(v)); for (const v of rec.disp) pd = Math.max(pd, Math.abs(v));
+  ok('the record is cached', rec === M.makeRecord(1, 12));
+  eq('record peak acceleration is 1', pk, 1, 1e-6); eq('record peak displacement is 1', pd, 1, 1e-6);
+  eq('record is quiet when it has finished', rec.acc[rec.acc.length - 1], 0, 1e-9);
+
+  // the rocking simulation, tipping either way
+  const runSim = (S, secs) => {
+    const D = M.derive(S), sim = new M.Sim(); sim.setRig(D, S); sim.reset();
+    const sides = new Set();
+    for (let i = 0; i < secs * 240; i++) { sim.step(1 / 240); if (sim.phi > 1e-4) sides.add(sim.side); if (sim.toppled) break; }
+    return { D, sim, sides };
+  };
+  const sheetOn = { ballastAuto: false, ballastPer: 9.055 };
+  let r = runSim(base(Object.assign({ indoorCase: 'door' }, sheetOn)), 20);
+  ok('a 2 s door gust at 5.4 m/s topples the sheet wall', r.sim.toppled);
+  r = runSim(base(Object.assign({ indoorCase: 'door', door: { v: 5.4, dur: 0.2 } }, sheetOn)), 20);
+  ok('the same gust for 0.2 s makes it lift and settle (the impulse is too small to tip it)', !r.sim.toppled && r.sim.maxPhi > 0 && r.sim.maxPhi < 0.01, r.sim.maxPhi);
+  r = runSim(base({ indoorCase: 'quake', ballastAuto: false, ballastPer: 9.055 }), 40);
+  ok('a 0.24 g quake topples the sheet wall', r.sim.toppled);
+  r = runSim(base({ indoorCase: 'quake' }), 40);
+  ok('on the ballast it asks for, the quake does not even lift it', r.sim.maxPhi === 0 && !r.sim.toppled, r.sim.maxPhi);
+  r = runSim(base({ indoorCase: 'sway', sway: { amp: 8, f: 2, bounce: 0 }, ballastAuto: false, ballastPer: 60 }), 40);
+  ok('8 mm of sway at 2 Hz rocks the wall both ways without toppling it', r.sides.has(1) && r.sides.has(-1) && !r.sim.toppled, [...r.sides]);
+  r = runSim(base({ indoorCase: 'sway', ballastAuto: false, ballastPer: 60 }), 40);
+  ok('5 mm of sway at 1.5 Hz on 60 kg per base never lifts it', r.sim.maxPhi === 0);
+  r = runSim(base({ indoorCase: 'knock', knock: { kgf: 25, h: 1.2, from: 'both', dur: 0.3, share: 2 }, ballastAuto: false, ballastPer: 9.055 }), 30);
+  ok('a 25 kgf knock does not lift the sheet wall', r.sim.maxPhi === 0);
+}
+
 const D1 = M.derive(base({ mode: 'outdoor' }));
 console.log('outdoor default: req per base', D1.req.per.toFixed(1), 'peak v', D1.wind.vPeak.toFixed(2), 'bft', D1.wind.bft, 'top deflection', (D1.bend.topEl * 1000).toFixed(1), 'mm (H/' + D1.bend.ratio.toFixed(0) + ')', 'seam', (D1.bend.seamOpen * 1000).toFixed(3), 'mm');
 console.log(fails ? 'TESTS FAILED: ' + fails + ' of ' + checks : 'ALL ' + checks + ' CHECKS PASSED');

@@ -32,6 +32,17 @@
   const BFT_UPPER = [0.2, 1.5, 3.3, 5.4, 7.9, 10.7, 13.8, 17.1, 20.7, 24.4, 28.4, 32.6];
   const BFT_NAME = ['Calm', 'Light air', 'Light breeze', 'Gentle breeze', 'Moderate breeze', 'Fresh breeze',
     'Strong breeze', 'Near gale', 'Gale', 'Strong gale', 'Storm', 'Violent storm', 'Hurricane force'];
+  // Picking a Beaufort force sets the top of its speed range, as the sheet's wind table does (force 12 has no top: 36.9 m/s ends the usual scale).
+  const BFT_SPEED = BFT_UPPER.concat([36.9]);
+  const bftRange = (n) => ({ lo: n <= 0 ? 0 : Math.round((BFT_UPPER[n - 1] + 0.1) * 10) / 10, hi: n >= 12 ? null : BFT_UPPER[n] });
+
+  // Indoor load cases. 'wind' pushes on the whole screen like moving air, 'force' is a push at one height,
+  // 'accel' is the floor or deck moving under the wall (every mass feels an inertia force, up and down too).
+  const CASES = ['draught', 'door', 'knock', 'sway', 'quake', 'notional'];
+  const CASE_KIND = { draught: 'wind', door: 'wind', knock: 'force', sway: 'accel', quake: 'accel', notional: 'accel' };
+  const CASE_NAME = { draught: 'Draught', door: 'Door gust', knock: 'Knock or push', sway: 'Stage sway', quake: 'Earthquake', notional: 'Code minimum' };
+  // Design ground acceleration of the three Greek seismic zones (Greek National Annex to Eurocode 8).
+  const QUAKE_ZONES = [{ zone: 'I', g: 0.16 }, { zone: 'II', g: 0.24 }, { zone: 'III', g: 0.36 }];
 
   // Cabinets, by module size. Weight per cabinet and depth are the manufacturer datasheet values (see notes); kg/m2 = kg / area.
   const CABINETS = [
@@ -68,6 +79,12 @@
       N: 14, autoN: true,
       ballastAuto: true, ballastPer: 9, ballast: null, ballastPos: 'auto',
       indoorScale: 2, outSpeed: 8, gust: 0.3, facing: 180, windDir: 0, profile: 'uniform',
+      indoorCase: 'draught',
+      door: { v: 5.4, dur: 2 },                                   // m/s at the screen, seconds
+      knock: { kgf: 25, h: 1.2, from: 'both', dur: 0.3, share: 2 }, // kgf, metres above the base, 'front' | 'rear' | 'both', seconds, bases that share it
+      sway: { amp: 5, f: 1.5, bounce: 0 },                        // mm, Hz, up-and-down shake as a fraction of g
+      quake: { pga: 0.24, floor: 1, dur: 12 },                    // ground acceleration in g, building amplification, seconds
+      notional: { pct: 2.5 },                                     // % of the weight, sideways
       Cf: 1.0, depth: SHEET.depth, mu: 0.5,
       frame: { perRow: SHEET.frame.perRow, perBase: SHEET.frame.perBase, perW: SHEET.frame.perW },
       EI: 2.9e6, gaRatio: 0.12, defLimit: 150,
@@ -84,7 +101,9 @@
 
   function windInfo(S) {
     let vMean, qMean, pk;
-    if (S.mode === 'indoor') {
+    if (S.mode === 'indoor' && S.indoorCase === 'door') {
+      vMean = S.door.v; qMean = RHO_FACTOR * vMean * vMean; pk = 1;
+    } else if (S.mode === 'indoor') {
       const row = SCALE[clamp(Math.round(S.indoorScale), 0, SCALE.length - 1)];
       vMean = row.v; qMean = row.q; pk = 1;
     } else {
@@ -97,9 +116,12 @@
      sys = { comps:[{m,xi,eta,Ig}], F (N), hc (m), xiw (m), strap|null }
      Returns the load factor lambda at which the moments balance for each rotation phi, and the best one. */
   function momentsAt(sys, phi) {
-    const c = Math.cos(phi), s = Math.sin(phi);
-    let Mr = 0; for (const k of sys.comps) Mr += k.m * G * (k.xi * c - k.eta * s);
-    return { c, s, Mr, M1: sys.F * c * (sys.hc * c + sys.xiw * s) };
+    // sys.acc: the floor accelerates sideways by acc, so every mass m gets a force m*acc at its own height; sys.gs scales the weights
+    // (a floor dropping away makes the wall lighter, one pushing up makes it heavier).
+    const c = Math.cos(phi), s = Math.sin(phi), gs = sys.gs === undefined ? 1 : sys.gs;
+    let Mr = 0, Ti = 0;
+    for (const k of sys.comps) { Mr += k.m * G * (k.xi * c - k.eta * s); Ti += k.m * (k.eta * c + k.xi * s); }
+    return { c, s, Mr: Mr * gs, M1: sys.acc ? sys.acc * Ti : sys.F * c * (sys.hc * c + sys.xiw * s) };
   }
   function strapGamma(st, c, s) {            // moment arm of the horizontal strap force about the toe (vertical component included)
     return (st.aPiv * c + st.xiAtt * s) + st.sgnV * st.tanb * (st.xiAtt * c - st.aPiv * s);
@@ -164,8 +186,8 @@
     return out;
   }
 
-  /* Everything the UI needs, from the raw inputs. */
-  function derive(S) {
+  /* Everything the UI needs, from the raw inputs. `ld` is an indoor load other than wind (see loadFor); null means the sheet's wind. */
+  function deriveOne(S, ld) {
     const cabH = cabHeight(S.cabSize);
     const cols = Math.round(S.W / CAB.w), rows = Math.max(1, Math.round(S.H / cabH));
     const A = S.W * S.H, N = Math.max(1, Math.round(S.N));
@@ -174,9 +196,10 @@
     const Wf = fr.perRow * S.H * N + fr.perBase * N + fr.perW * S.W;
 
     const wind = windInfo(S);
-    const th = S.windDir * Math.PI / 180, cosT = Math.cos(th), cn = Math.abs(cosT);
+    const th = S.windDir * Math.PI / 180, cosT = ld ? (ld.dir === 'front' ? -1 : 1) : Math.cos(th), cn = ld ? 1 : Math.abs(cosT);
     const dir = cosT >= 0 ? 'rear' : 'front';
-    wind.cn = cn; wind.dir = dir; wind.sinT = Math.sin(th);
+    wind.cn = cn; wind.dir = dir; wind.sinT = ld ? 0 : Math.sin(th);
+    const accel = !!(ld && ld.kind === 'accel'), pushed = !!(ld && ld.kind === 'force');
     wind.bft = beaufort(wind.vPeak); wind.bftName = BFT_NAME[wind.bft]; wind.bftMean = beaufort(wind.vMean);
 
     const stg = S.stage && S.stage.on ? S.stage : null;
@@ -186,7 +209,7 @@
 
     // --- base geometry (wall on its deck)
     const dd = S.depth - SHEET.depth;
-    const pos = S.ballastPos === 'auto' ? (dir === 'rear' ? 'rear' : 'mid') : S.ballastPos;
+    const pos = S.ballastPos === 'auto' ? ((ld && ld.pos) || (dir === 'rear' ? 'rear' : 'mid')) : S.ballastPos;   // the sheet puts the ballast mid-base for front wind
     const Lrear = pos === 'rear' ? S.depth - (SHEET.depth - SHEET.ballastRear) : SHEET.ballastMid + dd / 2;
     const Lfront = pos === 'rear' ? SHEET.depth - SHEET.ballastRear : SHEET.ballastMid + dd / 2;
     const aF = dir === 'rear' ? SHEET.frameArm : SHEET.frameArm + dd;
@@ -200,12 +223,19 @@
     const psi = (zAbs) => (alpha ? Math.pow(Math.max(zAbs, 3) / 10, 2 * alpha) : 1);
     const NS = 24, dz = S.H / NS, zs = new Array(NS), line = new Array(NS);
     let F = 0, M1 = 0;
+    const pBase = accel ? ld.acc * (Ws + Wf) / A : wind.qPeak * cn * S.Cf;      // N/m2; for shaking, the inertia of the screen and frame spread over the face
     for (let j = 0; j < NS; j++) {
-      const z = y0 + (j + 0.5) * dz, p = wind.qPeak * cn * S.Cf * psi(hs + z);
+      const z = y0 + (j + 0.5) * dz, p = pBase * psi(hs + z);
       zs[j] = z; line[j] = p * S.W; F += p * S.W * dz; M1 += p * S.W * dz * z;
     }
     let hc = F > 0 ? M1 / F : hW;
-    if (!alpha) { F = A * wind.qPeak * cn * S.Cf; hc = hW; }
+    if (!alpha) { F = A * pBase; hc = hW; }
+    if (pushed) {            // a push at one height; the bases that share it stand in for the whole wall, so scale the push up to the wall
+      const Feq = ld.P * N / Math.min(N, Math.max(1, Math.round(ld.share || 1)));
+      const hk = clamp(ld.h, y0 + 0.05, L), jh = clamp(Math.floor((hk - y0) / dz), 0, NS - 1);
+      for (let j = 0; j < NS; j++) line[j] = 0;
+      zs[jh] = hk; line[jh] = Feq / dz; F = Feq; hc = hk;
+    }
     const Fkgf = F / G, FkgfMean = F / G * (wind.qMean / (wind.qPeak || 1));
     const Mw = Fkgf * hc;                                   // kg*m about the toe, peak, unfactored
 
@@ -266,44 +296,46 @@
       { m: Ws, xi: aS, eta: y0 + S.H / 2, Ig: Ws * S.H * S.H / 12 },
       { m: Wf, xi: aF, eta: y0 + S.H / 2, Ig: Wf * S.H * S.H / 12 },
       { m: B, xi: aB, eta: y0 + 0.12, Ig: 0 }];
-    const sysW = (B) => ({ kind: 'W', comps: compsW(B), F, hc, xiw: aS, strap: strapFor('W', aS) });
+    const inert = accel ? { acc: ld.acc, gs: ld.gs } : null;           // shaking: inertia of every mass, and a lighter or heavier wall
+    const useS = !!stg && !(ld && ld.systems && ld.systems.S === false);   // deck sway moves the deck under the wall, not the stage on the floor
+    const sysW = (B) => Object.assign({ kind: 'W', comps: compsW(B), F, hc, xiw: aS, strap: strapFor('W', aS) }, inert);
     const sysS = (B) => {
       const c = compsW(B).map((k) => ({ m: k.m, xi: k.xi + xi0, eta: k.eta + hs, Ig: k.Ig }));
       c.push({ m: stageMass, xi: stg.depth / 2, eta: 0.55 * hs, Ig: stageMass * (stg.depth * stg.depth + hs * hs) / 12 });
-      return { kind: 'S', comps: c, F, hc: hs + hc, xiw: xiScreenS, strap: strapFor('S', xiScreenS) };
+      return Object.assign({ kind: 'S', comps: c, F, hc: hs + hc, xiw: xiScreenS, strap: strapFor('S', xiScreenS) }, inert);
     };
     const lamOf = (B) => {
-      const w = scanSys(sysW(B)), s = stg ? scanSys(sysS(B)) : null;
+      const w = scanSys(sysW(B)), s = useS ? scanSys(sysS(B)) : null;
       const lamW = Math.min(w.lamMax, SF_CAP * 10), lamS = s ? Math.min(s.lamMax, SF_CAP * 10) : Infinity;
       return { lamW, lamS, lam: Math.min(lamW, lamS), gov: lamS < lamW ? 'S' : 'W' };
     };
 
     // --- required ballast: closed form without straps (sheet formula), bisection with straps
-    let reqTotalRaw, reqTotal;
-    const hasStrap = !!(strapFor('W', aS) || (stg && strapFor('S', xiScreenS)));
+    let reqTotalRaw, reqTotal, capHit = false;
+    const hasStrap = !!(strapFor('W', aS) || (useS && strapFor('S', xiScreenS)));
     const reqClosed = (kind) => {
       const sys = kind === 'W' ? sysW(0) : sysS(0);
       const bl = kind === 'W' ? aB : aB + xi0;
       let Mr0 = 0; for (const k of sys.comps) Mr0 += k.m * k.xi;
       return (S.SF * Fkgf * sys.hc - Mr0) / bl;
     };
-    if (!hasStrap) {
+    if (!hasStrap && !accel) {                                   // the load does not depend on the ballast: closed form, as in the sheet
       reqTotalRaw = reqClosed('W');
-      if (stg) reqTotalRaw = Math.max(reqTotalRaw, reqClosed('S'));
+      if (useS) reqTotalRaw = Math.max(reqTotalRaw, reqClosed('S'));
       reqTotal = Math.max(0, reqTotalRaw);
-    } else {
+    } else {                                                     // straps, or shaking (the ballast itself adds inertia): bisection
       const ok = (B) => lamOf(B).lam >= S.SF - 1e-9;
       if (ok(0)) { reqTotal = 0; reqTotalRaw = 0; }
       else {
         let lo = 0, hi = MAX_BALLAST * N;
-        if (!ok(hi)) { reqTotal = hi; } else { for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (ok(mid)) hi = mid; else lo = mid; } reqTotal = hi; }
+        if (!ok(hi)) { reqTotal = hi; capHit = true; } else { for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (ok(mid)) hi = mid; else lo = mid; } reqTotal = hi; }
         reqTotalRaw = reqTotal;
       }
     }
     const reqPer = reqTotal / N;
 
     let ballast;
-    if (S.ballastAuto) ballast = new Array(N).fill(Math.min(reqPer, MAX_BALLAST));
+    if (S.ballastAuto) ballast = new Array(N).fill(ld && ld.ballastPer != null ? ld.ballastPer : Math.min(reqPer, MAX_BALLAST));
     else ballast = Array.from({ length: N }, (_, i) => (S.ballast && S.ballast[i] != null ? S.ballast[i] : S.ballastPer));
     const Wb = sum(ballast);
 
@@ -319,10 +351,13 @@
     // --- moments (kg*m) about the governing pivot, at the check state
     const stC = eqC || { phi: scanG.phiAtMax, Ph: 0 };
     const cC = Math.cos(stC.phi), sC = Math.sin(stC.phi);
-    const part = (k) => k.m * (k.xi * cC - k.eta * sC);
+    const gsG = sysG.gs === undefined ? 1 : sysG.gs;
+    const part = (k) => k.m * (k.xi * cC - k.eta * sC) * gsG;
     const Mpart = { s: part(sysG.comps[0]), f: part(sysG.comps[1]), b: part(sysG.comps[2]), stage: stg && gov === 'S' ? part(sysG.comps[3]) : 0, strap: 0 };
     if (sysG.strap) Mpart.strap = stC.Ph * strapGamma(sysG.strap, cC, sC) / G;
-    const MwG = (gov === 'S' ? hs + hc : hc) * Fkgf;
+    const Fdisp = sysG.acc ? sysG.acc * sum(sysG.comps.map((k) => k.m)) : F;           // N: the push, or the inertia of everything that moves
+    const TiG = sysG.acc ? sysG.comps.reduce((t, k) => t + k.m * (k.eta * cC + k.xi * sC), 0) : 0;
+    const MwG = sysG.acc ? sysG.acc * TiG / G : (gov === 'S' ? hs + hc : hc) * Fkgf;
     const M = { w: MwG, wSF: S.SF * MwG, s: Mpart.s, f: Mpart.f, b: Mpart.b, stage: Mpart.stage, strap: Mpart.strap, rest: Mpart.s + Mpart.f + Mpart.b + Mpart.stage + Mpart.strap, gov };
     const aBgov = gov === 'S' ? aB + xi0 : aB;
     const MwShare = MwG / N, base0 = (M.rest - M.b) / N;
@@ -331,6 +366,14 @@
     // --- limits (peak wind speed scales as sqrt(load factor))
     const vCritPeak = isFinite(SFact) && F > 0 ? wind.vPeak * Math.sqrt(SFact) : Infinity;
     const vAllowPeak = isFinite(SFact) && F > 0 ? wind.vPeak * Math.sqrt(SFact / S.SF) : Infinity;
+    const limits = { vCritPeak, vAllowPeak, vCritMean: vCritPeak / wind.pk, vAllowMean: vAllowPeak / wind.pk, kind: accel ? 'accel' : pushed ? 'force' : 'speed' };
+    if (accel) {                                  // in g, at the wall's base: the load grows in step with the safety factor
+      const a0 = ld.acc / G;
+      limits.crit = isFinite(SFact) ? SFact * a0 : Infinity; limits.allow = isFinite(SFact) ? SFact / S.SF * a0 : Infinity;
+    } else if (pushed) {                          // in kgf, at the height of the push
+      const P0 = ld.P / G;
+      limits.crit = isFinite(SFact) ? SFact * P0 : Infinity; limits.allow = isFinite(SFact) ? SFact / S.SF * P0 : Infinity;
+    }
 
     // --- elastic response at the nominal peak wind
     const eq = eq1 || { phi: scanG.phiAtMax, Ph: 0, none: true };
@@ -362,7 +405,7 @@
     } : null;
 
     // --- sliding and deck checks
-    const FN = F, Wwall = (Ws + Wf + Wb) * G;
+    const FN = Fdisp, Wwall = (Ws + Wf + Wb) * G;
     const muW = stg ? stg.muDeck : S.mu;
     const PhFloor = strapOut && strapOut.active && (sb.to === 'floor' || !stg) ? Phn : 0;
     const slide = { cap: muW * Wwall + (stg ? 0 : PhFloor), F: FN, SF: FN > 1e-9 ? (muW * Wwall + (stg ? 0 : PhFloor)) / FN : Infinity, mu: muW };
@@ -377,44 +420,157 @@
     }
 
     const pivotX = gov === 'S' ? (dir === 'rear' ? stg.front : -(stg.depth - stg.front)) : (dir === 'rear' ? 0 : -S.depth);
-    const rig = {
-      m: sysG.comps.map((k) => k.m), x: sysG.comps.map((k) => k.xi), y: sysG.comps.map((k) => k.eta), Ig: sysG.comps.map((k) => k.Ig),
-      F, hc: sysG.hc, xiw: sysG.xiw, strap: sysG.strap, gov, hs, tipDir,
-      bendStrap: intStrap ? { c0: sb.c0, dp1: sb.dp1a, gp: sb.gp, PhCap: sb.PhCap } : null
+    const buildRig = (sys) => {               // everything the rocking simulation needs about one failure system (wall on deck, or stage and wall)
+      const internal = !!(sb && sideActive && !sys.strap && sys.kind === 'S' && sb.to !== 'floor');
+      const r = {
+        m: sys.comps.map((k) => k.m), x: sys.comps.map((k) => k.xi), y: sys.comps.map((k) => k.eta), Ig: sys.comps.map((k) => k.Ig),
+        F, hc: sys.hc, xiw: sys.xiw, strap: sys.strap, gov: sys.kind, hs, tipDir,
+        bendStrap: internal ? { c0: sb.c0, dp1: sb.dp1a, gp: sb.gp, PhCap: sb.PhCap } : null,
+        acc: sys.acc || 0, gs: sys.gs === undefined ? 1 : sys.gs
+      };
+      r.I = 0; let mx = 0, my = 0;
+      for (let i = 0; i < r.m.length; i++) {
+        r.I += r.m[i] * (r.x[i] * r.x[i] + r.y[i] * r.y[i]) + r.Ig[i];
+        mx += r.m[i] * r.x[i]; my += r.m[i] * r.y[i];
+      }
+      const Mtot = sum(r.m);
+      r.phiCrit = Math.atan2(mx, my); r.xcg = mx / Mtot; r.ycg = my / Mtot;
+      return r;
     };
-    rig.I = 0; let mx = 0, my = 0;
-    for (let i = 0; i < rig.m.length; i++) {
-      rig.I += rig.m[i] * (rig.x[i] * rig.x[i] + rig.y[i] * rig.y[i]) + rig.Ig[i];
-      mx += rig.m[i] * rig.x[i]; my += rig.m[i] * rig.y[i];
-    }
-    const Mtot = sum(rig.m);
-    rig.phiCrit = Math.atan2(mx, my); rig.xcg = mx / Mtot; rig.ycg = my / Mtot;
+    const rig = buildRig(sysG);
+    const rigs = { W: gov === 'W' ? rig : buildRig(sysW(Wb)), S: !useS ? null : (gov === 'S' ? rig : buildRig(sysS(Wb))) };
 
     // hypothetical ballast -> safety factor (chart, hover tips, other tools)
     const sfOf = (Btot) => Math.min(lamOf(Btot).lam, 1e9);
-    const reqPerAtSpeed = (v, SFt) => {                         // kg per base needed at mean wind speed v for target SFt
-      const k = Math.pow(v / (wind.vMean || 1), 2) * SFt;
+    const reqPerAtK = (k) => {                                  // kg per base so that the load factor reaches k
       const ok = (B) => lamOf(B).lam >= k - 1e-9;
       if (ok(0)) return 0;
       let lo = 0, hi = MAX_BALLAST * N; if (!ok(hi)) return hi / N;
       for (let i = 0; i < 34; i++) { const mid = (lo + hi) / 2; if (ok(mid)) hi = mid; else lo = mid; }
       return hi / N;
     };
+    const reqPerAtSpeed = (v, SFt) => reqPerAtK(Math.pow(v / (wind.vMean || 1), 2) * SFt);    // at mean wind speed v for target SFt
+    const reqPerAtLoad = (x, SFt, x0) => reqPerAtK((x / (x0 || 1)) * SFt);                   // loads that grow in step with x (a push, a shake)
 
     return {
       cols, rows, A, N, Ws, Wf, Wb, wind, dir, pos, cabH,
       spacing: S.W / N, sheetN: sheetBases(S), spacingOK: S.W / N <= 1 + 1e-9,
       geom: { aS, aF, aB, hW, hc, ballastX, depth: S.depth, y0, L, hs, pivotX },
-      F: { kgf: Fkgf, kgfMean: FkgfMean, N: F },
+      F: { kgf: Fdisp / G, kgfMean: accel || pushed ? Fdisp / G : FkgfMean, N: Fdisp },
       M, Mpart,
-      req: { totalRaw: reqTotalRaw, total: reqTotal, per: reqPer, perRaw: reqTotalRaw / N, none: reqTotal <= 1e-9 && reqTotalRaw <= 0 || (hasStrap && reqTotal <= 1e-9), capped: reqPer > MAX_BALLAST },
+      req: { totalRaw: reqTotalRaw, total: reqTotal, per: reqPer, perRaw: reqTotalRaw / N, none: reqTotal <= 1e-9 && reqTotalRaw <= 0 || ((hasStrap || accel) && reqTotal <= 1e-9), capped: capHit || reqPer > MAX_BALLAST },
       ballast, SFact, status, lam: lm,
-      limits: { vCritPeak, vAllowPeak, vCritMean: vCritPeak / wind.pk, vAllowMean: vAllowPeak / wind.pk },
+      limits,
       slide, slideStage, deck, stage, strap: strapOut, bend, lean, eq: { phi, Ph: Phn, none: !!eq.none, capped: scanG.capped },
-      local, rig, gov, sfOf, reqPerAtSpeed, profileAlpha: alpha,
+      local, rig, rigs, gov, sfOf, reqPerAtSpeed, reqPerAtLoad, profileAlpha: alpha,
+      loadKind: accel ? 'accel' : pushed ? 'force' : 'wind',
       sys: { W: sysW, S: stg ? sysS : null }
     };
   }
+
+  /* The load of one indoor case, pushing one way. 'rear' tips the wall forward about the front toe (the sheet's rear wind),
+     'front' tips it backward about the rear toe. */
+  function loadFor(S, cs, dir) {
+    const base = { cs, dir, systems: { W: true, S: true } };
+    if (cs === 'knock') {
+      const k = S.knock;
+      return Object.assign(base, { kind: 'force', P: Math.max(0, k.kgf) * G, h: k.h, share: k.share });
+    }
+    if (cs === 'sway') {                                  // the deck moves by +-amp at f Hz: peak acceleration (2 pi f)^2 * amp; the bounce makes the wall lighter at the peaks
+      const w = 2 * Math.PI * Math.max(0.05, S.sway.f), a = w * w * Math.max(0, S.sway.amp) / 1000;
+      return Object.assign(base, { kind: 'accel', acc: a, gs: Math.max(0.05, 1 - Math.max(0, S.sway.bounce)), systems: { W: true, S: false } });
+    }
+    if (cs === 'quake') {                                 // ground acceleration times the building's amplification, with a vertical shake of half that
+      const a = Math.max(0, S.quake.pga) * Math.max(0.1, S.quake.floor);
+      return Object.assign(base, { kind: 'accel', acc: a * G, gs: Math.max(0.05, 1 - 0.5 * a) });
+    }
+    return Object.assign(base, { kind: 'accel', acc: Math.max(0, S.notional.pct) / 100 * G, gs: 1 });     // a notional sideways load as a share of the weight
+  }
+
+  /* Everything the UI needs for the selected load case. Shaking, and a push from either side, are checked both ways and the weaker way is reported. */
+  function derive(S) {
+    const cs = S.mode === 'indoor' ? (S.indoorCase || 'draught') : 'outdoor';
+    const kind = CASE_KIND[cs] || 'wind';
+    if (kind === 'wind') { const D = deriveOne(S, null); D.loadCase = cs; return D; }
+    const from = cs === 'knock' ? S.knock.from : 'both';
+    if (from === 'front' || from === 'rear') { const D = deriveOne(S, loadFor(S, cs, from)); D.loadCase = cs; return D; }
+    // Where the ballast sits matters when the load can come from either side: at the rear end it does nothing against a backward tip, in the
+    // middle it works both ways. With "Auto" try both and keep the one that needs less ballast (a layout that cannot reach the margin at all loses).
+    const attempt = (pos) => {
+      const ldR = loadFor(S, cs, 'rear'), ldF = loadFor(S, cs, 'front'); ldR.pos = ldF.pos = pos;
+      let dR = deriveOne(S, ldR), dF = deriveOne(S, ldF);
+      const reqR = dR.req, reqF = dF.req, per = Math.max(reqR.per, reqF.per);
+      if (S.ballastAuto) { ldR.ballastPer = ldF.ballastPer = Math.min(per, MAX_BALLAST); dR = deriveOne(S, ldR); dF = deriveOne(S, ldF); }
+      return { dR, dF, reqR, reqF, per, sf: Math.min(dR.SFact, dF.SFact), capped: reqR.capped || reqF.capped, pos };
+    };
+    let best = attempt(S.ballastPos === 'auto' ? 'rear' : S.ballastPos);
+    if (S.ballastPos === 'auto') {
+      const alt = attempt('mid');
+      const better = alt.capped === best.capped ? alt.per < best.per - 1e-9 : best.capped;
+      if (better) best = alt;
+    }
+    const { dR, dF, reqR, reqF, per } = best;
+    const D = dR.SFact <= dF.SFact ? dR : dF;
+    D.loadCase = cs; D.both = true; D.sides = { fwd: dR, back: dF }; D.posUsed = best.pos;
+    D.shake = { fwd: dR.rigs[D.gov] || dR.rig, back: dF.rigs[D.gov] || dF.rig };       // the rocking simulation tips either way
+    const sfR = dR.sfOf, sfF = dF.sfOf, rqR = dR.reqPerAtLoad, rqF = dF.reqPerAtLoad;      // (D is one of the two, so keep their own functions before replacing)
+    D.sfOf = (Btot) => Math.min(sfR(Btot), sfF(Btot));                                    // charts and tables use the weaker way at every ballast
+    D.reqPerAtLoad = (x, SFt, x0) => Math.max(rqR(x, SFt, x0), rqF(x, SFt, x0));
+    D.req = Object.assign({}, D.req, { per, total: per * D.N, perRaw: Math.max(reqR.perRaw, reqF.perRaw), totalRaw: Math.max(reqR.totalRaw, reqF.totalRaw),
+      none: reqR.none && reqF.none, capped: reqR.capped || reqF.capped });
+    return D;
+  }
+
+  /* Every indoor case side by side, for the ballast now on the bases (cur is the derive() result for the selected case). */
+  function compareCases(S, cur) {
+    const bal = cur ? { ballastAuto: false, ballast: cur.ballast.slice(), ballastPer: cur.Wb / cur.N } : {};
+    return CASES.map((id) => {
+      const S2 = Object.assign({}, S, { mode: 'indoor', indoorCase: id });
+      const Dn = derive(Object.assign({}, S2, bal));                                  // the safety factor on the ballast you have
+      const Dr = cur ? derive(Object.assign({}, S2, { ballastAuto: true })) : Dn;      // the ballast each case needs, on its own
+      return { id, name: CASE_NAME[id], kind: CASE_KIND[id], SF: Dn.SFact, status: Dn.status, req: Dr.req.per, none: Dr.req.none, capped: Dr.req.capped, limits: Dn.limits, gov: Dn.gov };
+    });
+  }
+
+  /* ---- how each load changes in time: all deterministic, so a replay looks the same ---- */
+  const smoothstep = (x) => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
+  // a pulse that repeats: starts at t0, rises, holds, falls, then rests before the next one
+  function pulseAt(t, t0, dur, rise, fall, rest) {
+    if (t < t0) return 0;
+    const tau = (t - t0) % (dur + rest);
+    if (tau >= dur) return 0;
+    const r = Math.max(0.01, Math.min(rise, dur / 2)), f = Math.max(0.01, Math.min(fall, dur / 2));
+    return smoothstep(tau / r) * (1 - smoothstep((tau - (dur - f)) / f));
+  }
+  /* An earthquake-like record: shaking from 0.4 to 10 Hz that builds up, stays strong, then dies away. Acceleration peak = 1, and the
+     ground displacement it gives (high-passed, peak 1) for drawing. Sum of sines with fixed phases, so it never changes between runs. */
+  const REC_DT = 1 / 120, recCache = {};
+  function makeRecord(seed, dur) {
+    const key = seed + ':' + dur; if (recCache[key]) return recCache[key];
+    let x = (seed * 2654435761) >>> 0; const rnd = () => { x = (Math.imul(x, 1664525) + 1013904223) >>> 0; return x / 4294967296; };
+    const n = 28, f = [], a = [], p = [];
+    for (let k = 0; k < n; k++) {
+      const fk = 0.4 * Math.pow(25, k / (n - 1)), lo = (fk / 0.7) * (fk / 0.7), sd = lo / (1 + lo) / (1 + Math.pow(fk / 4.5, 4));
+      f.push(fk); a.push(Math.sqrt(sd * fk)); p.push(2 * Math.PI * rnd());
+    }
+    const N = Math.ceil((dur + 0.2) / REC_DT) + 1, acc = new Float32Array(N), disp = new Float32Array(N);
+    const t1 = 0.12 * dur, t2 = 0.4 * dur, c = 3 / Math.max(dur - t2, 0.5);
+    let pk = 1e-9;
+    for (let i = 0; i < N; i++) {
+      const t = i * REC_DT; let s = 0;
+      for (let k = 0; k < n; k++) s += a[k] * Math.sin(2 * Math.PI * f[k] * t + p[k]);
+      const env = t >= dur ? 0 : t < t1 ? (t / t1) * (t / t1) : t <= t2 ? 1 : Math.exp(-c * (t - t2));
+      acc[i] = s * env; pk = Math.max(pk, Math.abs(acc[i]));
+    }
+    let v = 0, xd = 0, pd = 1e-9;
+    for (let i = 0; i < N; i++) {
+      acc[i] /= pk;
+      v = v * (1 - 1.2 * REC_DT) + acc[i] * REC_DT; xd = xd * (1 - 1.2 * REC_DT) + v * REC_DT; disp[i] = xd; pd = Math.max(pd, Math.abs(xd));
+    }
+    for (let i = 0; i < N; i++) disp[i] /= pd;
+    return (recCache[key] = { acc, disp });
+  }
+  const recAt = (arr, t) => { const x = t / REC_DT, i = Math.floor(x); if (!(x >= 0) || i >= arr.length - 1) return 0; const k = x - i; return arr[i] * (1 - k) + arr[i + 1] * k; };
 
   /* Deterministic gust signal in [-1, 1] (sum of incommensurate sines). */
   function gustN(t) {
@@ -430,15 +586,48 @@
     setRig(D, S) {
       this.rig = D.rig; this.gust = S.mode === 'outdoor' ? S.gust : 0;
       this.dirSign = D.dir === 'rear' ? 1 : -1; this.cn = D.wind.cn;
+      this.caseId = D.loadCase || 'draught';
+      this.shake = D.shake || null;                       // loads that can tip the wall either way: two rigs, one per toe
+      this.door = Object.assign({}, S.door); this.knock = Object.assign({}, S.knock); this.sway = Object.assign({}, S.sway); this.quake = Object.assign({}, S.quake);
+      this.pushSign = D.dir === 'rear' ? 1 : -1;
+      this.recs = this.caseId === 'quake' ? { h: makeRecord(1, S.quake.dur), v: makeRecord(7, S.quake.dur) } : null;
+      this.groundAmp = this.caseId === 'sway' ? S.sway.amp / 1000 : this.caseId === 'quake' ? 0.4 * S.quake.pga * S.quake.floor : 0;   // metres the floor really moves
+      if (!this.side) this.side = this.dirSign;
     }
-    reset() { this.t = 0; this.phi = 0; this.omega = 0; this.toppled = false; this.maxPhi = 0; this.impactAt = -1; this.lastU = 0; this.lam = 0; this.Ph = 0; this.broken = false; }
+    reset() {
+      this.t = 0; this.phi = 0; this.omega = 0; this.toppled = false; this.maxPhi = 0; this.impactAt = -1; this.lastU = 0; this.lam = 0; this.lamB = 0; this.Ph = 0; this.broken = false;
+      this.side = this.dirSign || 1;                       // +1 tilting forward about the front toe, -1 backward about the rear toe
+      this.pushDir = this.dirSign || 1;
+      this.ground = 0;                                     // how far the floor is displaced, -1..1 of its peak
+    }
     ramp(t) { const x = clamp(t / 1.5, 0, 1); return x * x * (3 - 2 * x); }
     windU(t) { const m = 1 + this.gust * gustN(t * 0.9 + 3); return this.ramp(t) * m / (1 + this.gust); }
-    step(dt) {
+    /* the load at time t: u (speed or load fraction), lam (load factor, signed when it can push either way), gs (weight factor), g (floor displacement) */
+    loadAt(t) {
+      switch (this.caseId) {
+        case 'door': { const u = pulseAt(t, 1, this.door.dur, 0.5, 0.7, 6); return { u, lam: u * u, gs: 1, g: 0 }; }
+        case 'knock': {
+          const d = this.knock.dur, u = pulseAt(t, 1, d, 0.05, 0.1, 5), n = t < 1 ? 0 : Math.floor((t - 1) / (d + 5));
+          const sgn = this.knock.from === 'rear' ? 1 : this.knock.from === 'front' ? -1 : (n % 2 === 0 ? 1 : -1);
+          return { u, lam: this.shake ? sgn * u : u, gs: 1, g: 0 };
+        }
+        case 'sway': { const r = smoothstep(t / 2), s = Math.sin(2 * Math.PI * this.sway.f * t) * r; return { u: s, lam: s, gs: 1 - this.sway.bounce * Math.abs(s), g: s }; }
+        case 'quake': {
+          const tau = t < 1 ? -1 : (t - 1) % (this.quake.dur + 6);
+          if (tau < 0) return { u: 0, lam: 0, gs: 1, g: 0 };
+          const a = recAt(this.recs.h.acc, tau), v = recAt(this.recs.v.acc, tau);
+          return { u: a, lam: a, gs: 1 + 0.5 * this.quake.pga * this.quake.floor * v, g: -recAt(this.recs.h.disp, tau) };
+        }
+        case 'notional': { const u = this.ramp(t); return { u, lam: this.pushSign * u, gs: 1, g: 0 }; }
+        default: { const u = this.windU(t); return { u, lam: u * u, gs: 1, g: 0 }; }
+      }
+    }
+    step(dt) { if (this.shake) this.stepShake(dt); else this.stepOne(dt); }
+    stepOne(dt) {                                          // wind, a door gust or a push from one side: tips one way, about one toe
       const R = this.rig; if (!R) return;
       this.t += dt;
-      const u = this.windU(this.t); this.lastU = u;
-      const lam = u * u; this.lam = lam;
+      const L = this.loadAt(this.t), u = L.u; this.lastU = u;
+      const lam = L.lam; this.lam = lam; this.lamB = lam;
       const c = Math.cos(this.phi), s = Math.sin(this.phi);
       const Tw = R.F * lam * c * (R.hc * c + R.xiw * s);
       let Tr = 0;
@@ -469,8 +658,50 @@
       if (this.phi > this.maxPhi) this.maxPhi = this.phi;
       if (!this.toppled && this.phi > R.phiCrit && net > 0 && (!R.strap || this.broken || this.phi > 0.6)) this.toppled = true;
     }
+    /* Shaking, or a push from either side. The wall rests flat, or rocks about the front toe (side +1) or the rear toe (side -1). Each toe has its
+       own geometry. When it comes back to the floor the other toe lands, some energy is lost, and it goes on over to the other side if it still has the speed. */
+    stepShake(dt) {
+      this.t += dt;
+      const L = this.loadAt(this.t), lam = L.lam, gs = L.gs;
+      this.lastU = L.u; this.lam = lam; this.ground = L.g;
+      this.lamB = lam * this.dirSign;                      // the load factor along the weaker way, which is how the bending is worked out
+      if (Math.abs(lam) > 1e-3) this.pushDir = lam >= 0 ? 1 : -1;       // which way the last push went (for the picture)
+      const moment = (side, phi) => {
+        const r = side > 0 ? this.shake.fwd : this.shake.back, c = Math.cos(phi), s = Math.sin(phi), ll = side * lam;   // ll < 0: the load helps this side
+        let Tr = 0, Ti = 0;
+        for (let i = 0; i < r.m.length; i++) { Tr += r.m[i] * G * (r.x[i] * c - r.y[i] * s); Ti += r.m[i] * (r.y[i] * c + r.x[i] * s); }
+        const Tw = r.acc ? ll * r.acc * Ti : ll * r.F * c * (r.hc * c + r.xiw * s);
+        let Ph = 0, Tst = 0; const st = r.strap;
+        if (st && !this.broken) {
+          const eng = ll * st.dp1 + phi * st.aPiv - st.gp;
+          if (eng > 0) { Ph = st.c0 * eng; if (Ph > st.PhCap * 1.0000001) { this.broken = true; Ph = 0; } else Tst = Ph * strapGamma(st, c, s); }
+        }
+        return { net: Tw - gs * Tr - Tst, Ph, r };
+      };
+      if (this.phi <= 0 && this.omega === 0) {            // lying flat: does the load lift one edge?
+        const sd = lam >= 0 ? 1 : -1, m0 = moment(sd, 0);
+        if (m0.net <= 0) { this.phi = 0; this.Ph = 0; return; }
+        this.side = sd;
+      }
+      const m = moment(this.side, this.phi), r = m.r; this.Ph = m.Ph;
+      this.omega += (m.net / r.I) * dt;
+      this.omega *= (1 - 0.35 * dt);
+      this.phi += this.omega * dt;
+      if (this.phi < 0) {                                  // back down: the other toe lands
+        const w = -this.omega; this.phi = 0; this.side = -this.side;
+        this.omega = w > 0.01 ? 0.85 * w : 0;
+      }
+      const floor = Math.PI / 2;
+      if (this.phi > floor) {
+        this.phi = floor;
+        if (this.omega > 0.25 && this.impactAt < 0) this.impactAt = this.t;
+        this.omega = this.omega > 0.25 ? -this.omega * 0.18 : 0;
+      }
+      if (this.phi > this.maxPhi) this.maxPhi = this.phi;
+      if (!this.toppled && this.phi > r.phiCrit && this.omega > 0 && (!r.strap || this.broken || this.phi > 0.6)) this.toppled = true;
+    }
     liftMM(depth) { return Math.sin(this.phi) * depth * 1000; }
   }
 
-  return { G, CAB, SHEET, SCALE, CABINETS, cabArea, cabHeight, RESTRAINT, PROFILE_ALPHA, MAX_BALLAST, SF_CAP, BFT_NAME, beaufort, defaults, derive, gustN, Sim, sheetBases, clamp, windInfo, scanSys, lamAt };
+  return { G, CAB, SHEET, SCALE, CABINETS, cabArea, cabHeight, RESTRAINT, PROFILE_ALPHA, MAX_BALLAST, SF_CAP, BFT_NAME, BFT_SPEED, bftRange, CASES, CASE_KIND, CASE_NAME, QUAKE_ZONES, beaufort, defaults, derive, compareCases, loadFor, makeRecord, gustN, Sim, sheetBases, clamp, windInfo, scanSys, lamAt };
 });

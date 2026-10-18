@@ -63,10 +63,10 @@ svg.ic{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-wid
 }
 @media (min-width:1300px){
   .grid{grid-template-columns:316px minmax(0,1fr) 366px;grid-template-rows:auto 1fr auto}
-  .rail{grid-row:1 / span 2}
+  .rail{grid-row:1 / span 3}                                   /* the controls stay pinned right down to the checks, so nothing slides under them */
   .view{grid-column:2;grid-row:1}.rest{grid-column:2;grid-row:2;align-self:start}
   .results{grid-column:3;grid-row:1 / span 2}
-  .more{grid-column:1 / -1;grid-row:3}
+  .more{grid-column:2 / -1;grid-row:3}
 }
 .more{display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
 @media (min-width:760px){.more{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
@@ -260,3 +260,18 @@ details.tv>summary:hover{color:var(--ink)}
 @media (max-width:640px){.hud.tl2 .live{gap:10px}.hud.tr2{top:auto;bottom:8px;right:10px}.hud.bl2{display:none}}
 #bendC{touch-action:pan-y}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ---------- indoor load picker and comparison table ---------- */
+.seg.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+.seg.grid3 button{padding:0 4px;font-size:12.5px}
+table.cmp td,table.cmp th{white-space:normal}
+table.cmp tbody tr{cursor:pointer}
+table.cmp tbody tr:hover{background:var(--panel2)}
+table.cmp tbody tr[aria-selected="true"]{background:var(--accent-wash)}
+table.cmp td:first-child{font-family:var(--font-body);font-variant-numeric:normal}
+table.cmp td:first-child small{display:block;font-size:11.5px;color:var(--ink3)}
+table.cmp td.sf{font-weight:600}
+table.cmp td.sf[data-s="stable"]{color:var(--good-ink)}
+table.cmp td.sf[data-s="marginal"]{color:var(--warn-ink)}
+table.cmp td.sf[data-s="tipping"]{color:var(--crit-ink)}
+table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radius:4px;background:var(--accent-wash);color:var(--ink2);font:600 10px var(--font-body);letter-spacing:.04em;text-transform:uppercase}

@@ -12,8 +12,9 @@ It is one HTML file with no dependencies. There is nothing to install: open `ind
 
 - **Cabinets:** 500 × 500 mm or 500 × 1000 mm, with weights from Unilumin datasheets (Uslim2, Uslim4, UGC, USlim-O3, USlim-O4), the sheet's own 26.4 kg/m², or your own number.
 - **Wall and bases:** any width and height, any number of bases, ballast per base set by hand or solved automatically for the safety factor you ask for.
-- **Environment:** indoor draught using the sheet's wind scale, or outdoor wind in m/s with the Beaufort scale, gusts and a wind gradient (open country, suburb, city).
-- **Wind direction:** from the rear or the front, and any angle in between. A dial shows it.
+- **Outdoor wind:** set in Beaufort (0 to 12, the way forecasts give it) or in m/s, with gusts and a wind gradient (open country, suburb, city). Picking a Beaufort force uses the top of its speed range, like the sheet's wind table.
+- **Indoor loads:** indoors wind is not the real load, so you choose what pushes on the wall: the sheet's **draught**, a **door gust** (speed and how long it lasts), a **knock** or push (force, height, which side, how many bases share it), **stage sway** (deck movement in mm at a frequency, with optional up-and-down bounce), an **earthquake** (ground acceleration, with the three Greek seismic zones as presets, and which floor of the building) or the **code minimum** (a sideways load of 2.5% of the weight). A table compares all of them on your ballast, so you can see which one governs.
+- **Wind direction:** from the rear or the front, and any angle in between (draught, door gust and outdoor wind). A dial shows it.
 - **Stage:** put the wall on a standard deck, pick the stage height, depth and how far the screen sits from the front edge. It checks the wall sliding on the deck and the stage and wall tipping together about the stage edge, and compares the load with the deck rating.
 - **Straps:** ratchet strap, steel cable or rear truss, from the top of the wall (or any height) to the floor or the stage deck, with a rated load and an anchor weight.
 - **Views:**
@@ -23,7 +24,7 @@ It is one HTML file with no dependencies. There is nothing to install: open `ind
   - a wind dial from above,
   - a stability map of ballast against wind speed,
   - a bending profile.
-- **Animation:** wind and gusts run live. A wall that is pushed past its tipping point rocks over, and one held by straps stays up and leans.
+- **Animation:** wind, gusts, pushes and shaking run live. A wall that is pushed past its tipping point rocks over, and one held by straps stays up and leans. Under shaking it rocks about either toe, and a brief gust or push that lifts the wall can leave it standing.
 - **The sheet, cell by cell:** the original formulas with your current numbers filled in.
 - Quick scenarios: *Sheet example*, *No ballast*, *Strong draught*, *Front draught*, *Outdoor breeze*, *Outdoor gale*, *On a stage*, *Top straps*.
 
@@ -55,8 +56,27 @@ With wind from the rear the toe is under the screen (screen arm 0, frame arm 0.4
 - *Stage.* Two failure systems are checked and the worse one governs: the wall on the deck, and the stage with the wall about the stage edge.
 - *Wind.* Outdoors, gusts raise the design wind to the peak speed, and the animation replays them. The gradient uses a power law (exponent 0.14, 0.22 or 0.30), measured from the floor including the stage.
 
+### Indoor loads
+
+Air in a hall hardly moves, so the sheet's wind scale really stands in for sideways loads that nobody has measured: a draught, a bump, a wobbling floor. At Beaufort 2 it pushes with about 2% of the wall's weight, close to the 2.5% that temporary-works rules ask for as a minimum. The simulator lets you pick the loads one by one:
+
+| Load | What it is | How it is worked out |
+| --- | --- | --- |
+| Draught | The sheet's wind scale | The sheet's formulas, unchanged |
+| Door gust | Air through a door for a moment | Wind pressure at your speed; the animation shows a gust of your length |
+| Knock | A person leans, bumps or pushes a trolley | A push at one height, carried by the bases that share it |
+| Stage sway | The deck wobbles | Every mass feels the acceleration (2π·f)²·amplitude; bounce makes the wall lighter at the peaks |
+| Earthquake | The ground shakes | Ground acceleration times the building's amplification (up to 2.5 on a top floor), with a vertical shake of half of it |
+| Code minimum | A notional sideways load | 2.5% of the weight, for out-of-plumb and rough handling |
+
+For shaking and for a push from either side the wall is checked both ways, because the screen's weight sits at the front toe: tipping forward is the weak direction. The ballast sits where it helps most (rear end against a forward tip, middle when the load can come from both sides). The safety factor is the usual steady-load check (tipping acceleration, push or gust against yours). The animation is a rocking-block simulation about either toe, with an earthquake-like record, so it also shows what a short load really does. It uses a single deterministic record, so it shows what could happen, not what will.
+
 ## Assumptions and limits
 
+- A sudden push, gust or shake on a strapped wall can double the pull on the strap compared with the static figure.
+- Sliding is checked but not simulated, so a shake above µ·g, which would make the wall slide and lower the load on it, is not followed.
+- Building rules for interior partitions ask for 0.24 kN/m² (5 psf). That is about 35 times the sheet's Beaufort 2 pressure. It is meant for walls people lean on, not for LED screens, so it is not used here.
+- The sway and push defaults are engineering guesses, not figures from a standard. Check them against your venue.
 - Straps are hand-tight with no slack. A loose strap lets the wall start to fall before it pulls and then takes a shock load.
 - Bending stiffness is illustrative (about two 50 × 50 × 3 aluminium posts 0.38 m apart per base, EI = 2.9 MN·m²). Set it to your own frame in *Advanced*.
 - The sheet counts frame weight per 1 m row. With 500 mm cabinets that would double it, which is not conservative, so the frame is counted per metre of height here (4 kg per metre per base, plus 4.15 kg per base and 7.9 kg per metre of width, as in the sheet).
@@ -73,6 +93,11 @@ With wind from the rear the toe is under the screen (screen arm 0, frame arm 0.4
 - Steeldeck 8 × 4 ft stage deck, rated about 7.5 kN/m².
 - EN 12195-2 for ratchet strap elongation (manufacturer datasheets).
 - ROE Visual and PRG guidance on wind loads and bracing for LED walls.
+- Notional sideways load of 2.5% of the vertical load for temporary works: [Hong Kong Labour Department falsework code](https://www.labour.gov.hk/eng/public/os/C/falsework_eng.pdf) (BS 5975 uses the same figure).
+- Push forces: [CCOHS, Pushing and pulling](https://ccohs.gc.ca/oshanswers/ergonomics/push1.html): about 225 N for a whole-body push, up to about 675 N when braced.
+- Earthquakes: the Greek National Annex to Eurocode 8 uses design ground accelerations of 0.16, 0.24 and 0.36 g ([Springer, 2024](https://link.springer.com/article/10.1007/s10518-024-01919-8)); force on non-structural elements from EN 1998-1, 4.3.5 ([explained here](https://protasoftware.com/wiki/seismic-forces-on-non-structural-members/)), with a rigid element on the roof feeling up to 2.5 times the ground.
+- Air through doorways, mostly 0.5 to 2.5 m/s: [AIVC, entrance doors](https://www.aivc.org/resource/infiltration-characteristics-entrance-doors).
+- Level floors matter for ground-supported LED walls, which lean forward: [Nationwide Video](https://nationwidevideo.com/ground-supported-led-wall-ballast-factors/).
 
 ## Develop
 

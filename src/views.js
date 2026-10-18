@@ -51,11 +51,16 @@ function drawRear(canvas, st, hit) {
     txt(ctx, sp.n + ' × ' + (sp.type === 'truss' ? 'truss' : sp.type === 'cable' ? 'cable' : 'strap') + ' at ' + nf(sp.a, 1) + ' m', x0 + 6, ay + 19, { font: '500 10px ' + F.mono, color: BP.strap, halo: BP.wall, haloW: 3 });
   }
   const rearWind = D.dir === 'rear', gx = w - 22, gy = 15;
-  ctx.strokeStyle = BP.force; ctx.fillStyle = BP.force; ctx.lineWidth = 1.6;
-  ctx.beginPath(); ctx.arc(gx, gy, 7.5, 0, TAU); ctx.stroke();
-  if (rearWind) { line(ctx, gx - 3.2, gy - 3.2, gx + 3.2, gy + 3.2); line(ctx, gx + 3.2, gy - 3.2, gx - 3.2, gy + 3.2); }
-  else { ctx.beginPath(); ctx.arc(gx, gy, 2.4, 0, TAU); ctx.fill(); }
-  txt(ctx, D.wind.cn < 0.03 ? 'wind parallel to the screen' : rearWind ? 'wind from the rear (away from you)' : 'wind from the front (toward you)', gx - 13, gy + 4, { font: '500 11px ' + F.sans, align: 'right', color: BP.text });
+  if (D.loadKind === 'wind') {
+    ctx.strokeStyle = BP.force; ctx.fillStyle = BP.force; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(gx, gy, 7.5, 0, TAU); ctx.stroke();
+    if (rearWind) { line(ctx, gx - 3.2, gy - 3.2, gx + 3.2, gy + 3.2); line(ctx, gx + 3.2, gy - 3.2, gx - 3.2, gy + 3.2); }
+    else { ctx.beginPath(); ctx.arc(gx, gy, 2.4, 0, TAU); ctx.fill(); }
+    txt(ctx, D.wind.cn < 0.03 ? 'wind parallel to the screen' : rearWind ? 'wind from the rear (away from you)' : 'wind from the front (toward you)', gx - 13, gy + 4, { font: '500 11px ' + F.sans, align: 'right', color: BP.text });
+  } else {
+    const say = D.loadKind === 'force' ? (S.knock.from === 'both' ? 'push from either side' : 'push from the ' + S.knock.from) : 'floor shakes front to back';
+    txt(ctx, say, gx + 8, gy + 4, { font: '500 11px ' + F.sans, align: 'right', color: BP.text });
+  }
 
   const bTop = y1 + 40, bBot = h - padB;
   const yv = (kg) => bBot - clamp(kg / niceTop, 0, 1.05) * (bBot - bTop);
@@ -159,6 +164,31 @@ function drawPlan(canvas, st, hit) {
   ctx.fillStyle = '#c5d0df'; ctx.fillRect(wx0, cy - 4, wallPx, 5);
   ctx.save(); ctx.shadowColor = 'rgba(100,215,255,.9)'; ctx.shadowBlur = 8; ctx.fillStyle = '#6fd6ff'; ctx.fillRect(wx0, cy + 0.5, wallPx, 2); ctx.restore();
 
+  if (D.loadKind !== 'wind') {                              // a push or a shake works along the front-back line only: no direction to drag
+    hit.handle = null;
+    ctx.strokeStyle = BP.force; ctx.fillStyle = BP.force; ctx.lineCap = 'round';
+    const pulse = 0.5 + 0.5 * Math.min(1, Math.abs(st.sim.lam));
+    if (D.loadKind === 'force') {
+      const both = S.knock.from === 'both', sides = both ? [-1, 1] : [S.knock.from === 'rear' ? -1 : 1];
+      for (const sd of sides) {                              // sd -1: from the rear (top of the dial), +1: from the front
+        const y0p = cy + sd * (R * 0.95), y1p = cy + sd * (R * 0.34), act = both ? (st.sim.lam >= 0 ? sd === -1 : sd === 1) : true;
+        ctx.globalAlpha = act ? 1 : 0.4; ctx.lineWidth = 2.6; line(ctx, cx, y0p, cx, y1p);
+        arrow(ctx, cx, cy + sd * R * 0.4, cx, cy + sd * R * 0.3, 10, 6.5);
+        ctx.beginPath(); ctx.arc(cx, y0p, 7 * pulse + 2, 0, TAU); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      txt(ctx, nf0(S.knock.kgf) + ' kgf at ' + nf1(S.knock.h) + ' m', cx, cy + R * 0.62, { font: '600 11.5px ' + F.mono, align: 'center', color: BP.bright, halo: BP.bg, haloW: 3 });
+      txt(ctx, 'shared by ' + S.knock.share + ' of ' + D.N + ' bases', cx, cy + R * 0.62 + 14, { font: '500 10.5px ' + F.sans, align: 'center', color: BP.cyan, halo: BP.bg, haloW: 3 });
+    } else {
+      ctx.lineWidth = 2.6; line(ctx, cx, cy - R * 0.86, cx, cy + R * 0.86);
+      arrow(ctx, cx, cy - R * 0.96, cx, cy - R * 0.74, 10, 6.5); arrow(ctx, cx, cy + R * 0.96, cx, cy + R * 0.74, 10, 6.5);
+      const aNow = Math.abs(st.sim.lam) * (D.rig.acc || 0) / M.G;
+      txt(ctx, nf(aNow, 3) + ' g now', cx, cy + R * 0.62, { font: '600 11.5px ' + F.mono, align: 'center', color: BP.bright, halo: BP.bg, haloW: 3 });
+      txt(ctx, 'the wall tips the weaker way', cx, cy + R * 0.62 + 14, { font: '500 10.5px ' + F.sans, align: 'center', color: BP.cyan, halo: BP.bg, haloW: 3 });
+    }
+    ctx.lineCap = 'butt';
+    return;
+  }
   const a = S.windDir * Math.PI / 180, sn = Math.sin(a), cs = Math.cos(a);
   const sx = cx + sn * R, sy = cy - cs * R;
   const dx = -sn, dy = cs, nx = -dy, ny = dx;
@@ -182,19 +212,49 @@ function drawPlan(canvas, st, hit) {
 }
 
 /* ---------------- stability map ----------------
-   Curves are traced from the ballast side: for each ballast, the wind that just reaches the required safety factor and the wind
-   that tips it. Wind speed scales with the square root of the load factor, so this needs one solve per ballast value. */
-function mapCurves(D, S) {
-  const vM = D.wind.vMean, N = D.N, pts = [];
+   Curves are traced from the ballast side: for each ballast, the load that just reaches the required safety factor and the load
+   that tips it. Wind speed scales with the square root of the load factor, a push or a shake directly, so this needs one solve
+   per ballast value. */
+function axisOf(st) {                                // what the horizontal axis is, for the load in play
+  const { S, D } = st, kind = D.loadKind, cs = D.loadCase;
+  if (kind === 'wind') {
+    return { kind, x0: D.wind.vMean, exp: 0.5, label: 'mean wind speed (m/s)', sub: 'ballast per base against wind', th1: 'Wind (m/s)', th2: 'Beaufort',
+      max: Math.ceil(Math.max(S.mode === 'indoor' ? 18 : 30, D.wind.vMean * 1.3) / 5) * 5, you: nf(D.wind.vMean, 1) + ' m/s' };
+  }
+  if (kind === 'force') {
+    const x0 = Math.max(S.knock.kgf, 1e-6);
+    return { kind, x0, exp: 1, label: 'push (kgf)', sub: 'ballast per base against the push', th1: 'Push (kgf)', th2: 'Times yours', max: niceMax(Math.max(100, x0 * 1.6)), you: nf0(x0) + ' kgf' };
+  }
+  if (cs === 'sway') {
+    const g = Math.max(Math.pow(2 * Math.PI * S.sway.f, 2) * S.sway.amp / 1000 / M.G, 1e-6);
+    return { kind, x0: g, exp: 1, label: 'peak deck acceleration (g)', sub: 'ballast per base against the shake', th1: 'Shake (g)', th2: 'Times yours', max: niceMax(Math.max(0.15, g * 1.6)), you: nf(g, 3) + ' g' };
+  }
+  if (cs === 'quake') {
+    const g = Math.max(S.quake.pga, 1e-6);
+    return { kind, x0: g, exp: 1, label: 'ground acceleration (g)', sub: 'ballast per base against the earthquake', th1: 'Ground (g)', th2: 'Times yours', max: niceMax(Math.max(0.5, g * 1.4)), you: nf2(g) + ' g', zones: true };
+  }
+  const p = Math.max(S.notional.pct, 1e-6);
+  return { kind, x0: p, exp: 1, label: 'sideways load (% of the weight)', sub: 'ballast per base against the sideways load', th1: 'Load (% of weight)', th2: 'Times yours', max: niceMax(Math.max(6, p * 1.6)), you: nf1(p) + '%' };
+}
+function axisTitle(ax, v) {
+  if (ax.kind === 'wind') return 'Mean wind ' + nf1(v) + ' m/s · Beaufort ' + M.beaufort(v);
+  if (ax.kind === 'force') return 'Push ' + nf0(v) + ' kgf';
+  if (ax.zones) return 'Ground ' + nf2(v) + ' g';
+  return ax.th1.indexOf('Shake') === 0 ? 'Deck shake ' + nf(v, 3) + ' g' : 'Load ' + nf1(v) + '% of the weight';
+}
+const reqAtAxis = (D, ax, x, SFt) => (ax.kind === 'wind' ? D.reqPerAtSpeed(x, SFt) : D.reqPerAtLoad(x, SFt, ax.x0));
+const sfAtAxis = (D, ax, x) => { const r = x / ax.x0; return x > 0 ? D.SFact / (ax.kind === 'wind' ? r * r : r) : Infinity; };
+function mapCurves(D, S, ax) {
+  const N = D.N, pts = [];
   const grid = [0];
   for (let b = 0.4; b < 8000; b *= 1.115) grid.push(b);
   for (const b of grid) {
     const lam = Math.min(D.sfOf(b * N), 1e6);
-    pts.push({ b, vAllow: vM * Math.sqrt(lam / S.SF), vCrit: vM * Math.sqrt(lam) });
+    pts.push({ b, vAllow: ax.x0 * Math.pow(lam / S.SF, ax.exp), vCrit: ax.x0 * Math.pow(lam, ax.exp) });
   }
   return pts;
 }
-function bAtV(pts, key, v) {                         // ballast per base needed to reach wind speed v
+function bAtV(pts, key, v) {                         // ballast per base needed to reach load v
   if (v <= pts[0][key]) return 0;
   for (let i = 1; i < pts.length; i++) if (pts[i][key] >= v) { const a = pts[i - 1], b = pts[i], f = (v - a[key]) / (b[key] - a[key] || 1); return a.b + f * (b.b - a.b); }
   return Infinity;
@@ -202,17 +262,17 @@ function bAtV(pts, key, v) {                         // ballast per base needed 
 function drawMap(canvas, st, hit) {
   const { ctx, w, h } = fitCanvas(canvas);
   ctx.clearRect(0, 0, w, h);
-  const { S, D } = st, T = theme(), indoor = S.mode === 'indoor';
+  const { S, D } = st, T = theme(), ax = axisOf(st), wind = ax.kind === 'wind';
   const padL = 46, padR = 14, padT = 38, padB = 34, pw = w - padL - padR, ph = h - padT - padB;
-  const xMax = Math.ceil(Math.max(indoor ? 18 : 30, D.wind.vMean * 1.3) / 5) * 5;
-  const pts = mapCurves(D, S);
+  const xMax = ax.max;
+  const pts = mapCurves(D, S, ax);
   const req = (v) => bAtV(pts, 'vAllow', v), tip = (v) => bAtV(pts, 'vCrit', v);
   const avg = D.Wb / D.N;
   let yTop = Math.pow(10, Math.ceil(Math.log10(Math.max(Math.min(req(xMax), 1e6), avg * 2, 30))));
   yTop = clamp(yTop, 100, 1e6);
   const c0 = 2, ys = (kg) => Math.log10(1 + Math.max(0, kg) / c0), ysTop = ys(yTop);
   const xp = (v) => padL + v / xMax * pw, yp = (kg) => padT + ph - clamp(ys(kg) / ysTop, 0, 1.2) * ph;
-  hit.map = { padL, padT, pw, ph, xMax, yTop, c0, ysTop, xp, yp, w, h };
+  hit.map = { padL, padT, pw, ph, xMax, yTop, c0, ysTop, xp, yp, w, h, ax };
   hit.vAt = (px) => clamp((px - padL) / pw * xMax, 0, xMax);
   hit.kgAt = (py) => { const f = clamp((padT + ph - py) / ph, 0, 1); return c0 * (Math.pow(10, f * ysTop) - 1); };
 
@@ -228,20 +288,30 @@ function drawMap(canvas, st, hit) {
   ctx.lineWidth = 1; ctx.font = '10.5px ' + F.mono;
   const yt = [0, 10, 100, 1000, 10000, 100000, 1000000].filter(v => v <= yTop);
   yt.forEach(v => { const y = Math.round(yp(v)) + 0.5; ctx.strokeStyle = v === 0 ? T.ink3 : T.line; line(ctx, padL, y, padL + pw, y); txt(ctx, v >= 1000 ? (v / 1000) + 'k' : String(v), padL - 7, y + 3.5, { font: '10.5px ' + F.mono, align: 'right', color: T.ink3 }); });
-  const xs = xMax <= 20 ? 2 : 5;
-  for (let v = 0; v <= xMax + 1e-9; v += xs) { const x = Math.round(xp(v)) + 0.5; ctx.strokeStyle = T.line; line(ctx, x, padT, x, padT + ph); txt(ctx, String(v), x, padT + ph + 14, { font: '10.5px ' + F.mono, align: 'center', color: T.ink3 }); }
-  txt(ctx, 'mean wind speed (m/s)', padL + pw / 2, h - 5, { font: '11px ' + F.sans, align: 'center', color: T.ink2 });
+  const xs = wind ? (xMax <= 20 ? 2 : 5) : niceMax(xMax / 5), xd = xs < 0.1 ? 2 : xs < 1 ? 1 : 0;
+  for (let v = 0; v <= xMax + 1e-9; v += xs) { const x = Math.round(xp(v)) + 0.5; ctx.strokeStyle = T.line; line(ctx, x, padT, x, padT + ph); txt(ctx, wind ? String(v) : nf(v, xd), x, padT + ph + 14, { font: '10.5px ' + F.mono, align: 'center', color: T.ink3 }); }
+  txt(ctx, ax.label, padL + pw / 2, h - 5, { font: '11px ' + F.sans, align: 'center', color: T.ink2 });
   txt(ctx, 'kg of ballast per base', padL - 40, 11, { font: '11px ' + F.sans, color: T.ink2 });
-  const bl = M.BFT_NAME.length - 1;
-  const bu = [0.2, 1.5, 3.3, 5.4, 7.9, 10.7, 13.8, 17.1, 20.7, 24.4, 28.4, 32.6, 36.9];
-  ctx.strokeStyle = T.ink3; ctx.lineWidth = 1;
-  for (let b = 1; b <= bl; b++) {
-    const lo = bu[b - 1], hi = bu[b]; if (lo >= xMax) break;
-    const xa = xp(lo), xb = xp(Math.min(hi, xMax));
-    line(ctx, xa + 0.5, padT - 6, xa + 0.5, padT);
-    if (xb - xa >= 13) txt(ctx, String(b), (xa + xb) / 2, padT - 9, { font: '10px ' + F.mono, align: 'center', color: T.ink3 });
+  if (wind) {
+    const bl = M.BFT_NAME.length - 1;
+    const bu = M.BFT_SPEED;
+    ctx.strokeStyle = T.ink3; ctx.lineWidth = 1;
+    for (let b = 1; b <= bl; b++) {
+      const lo = bu[b - 1], hi = bu[b]; if (lo >= xMax) break;
+      const xa = xp(lo), xb = xp(Math.min(hi, xMax));
+      line(ctx, xa + 0.5, padT - 6, xa + 0.5, padT);
+      if (xb - xa >= 13) txt(ctx, String(b), (xa + xb) / 2, padT - 9, { font: '10px ' + F.mono, align: 'center', color: T.ink3 });
+    }
+    txt(ctx, 'Beaufort', padL - 7, padT - 9, { font: '10px ' + F.sans, align: 'right', color: T.ink3 });
+  } else if (ax.zones) {                              // the three Greek seismic zones
+    ctx.strokeStyle = T.ink3; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+    for (const z of M.QUAKE_ZONES) {
+      if (z.g > xMax) continue;
+      const x = Math.round(xp(z.g)) + 0.5; line(ctx, x, padT - 6, x, padT + ph);
+      txt(ctx, 'zone ' + z.zone, x, padT - 9, { font: '10px ' + F.mono, align: 'center', color: T.ink2 });
+    }
+    ctx.setLineDash([]);
   }
-  txt(ctx, 'Beaufort', padL - 7, padT - 9, { font: '10px ' + F.sans, align: 'right', color: T.ink3 });
 
   ctx.save(); ctx.beginPath(); ctx.rect(padL, padT - 1, pw, ph + 1); ctx.clip();
   ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.lineWidth = 2;
@@ -254,14 +324,14 @@ function drawMap(canvas, st, hit) {
   if (yB < padT + ph - 14) txt(ctx, 'Tips over', lx + 6, Math.min(padT + ph - 7, yB + 16), { font: '600 11.5px ' + F.sans, color: T.critInk });
   if (yA < padT + ph - 6) txt(ctx, 'needs SF ' + nf2(S.SF), lx - 4, Math.max(padT + 13, yA - 7), { font: '500 11px ' + F.sans, align: 'right', color: T.ink2 });
 
-  const vx = xp(D.wind.vMean), vy = yp(avg);
+  const vx = xp(ax.x0), vy = yp(avg);
   hit.dot = { x: vx, y: vy };
   ctx.strokeStyle = T.ink3; ctx.lineWidth = 1; ctx.setLineDash([2, 3]); line(ctx, vx + 0.5, vy, vx + 0.5, padT + ph); ctx.setLineDash([]);
   const col = D.status === 'stable' ? T.good : D.status === 'marginal' ? T.warn : T.crit;
   ctx.fillStyle = T.panel; ctx.beginPath(); ctx.arc(vx, vy, 9, 0, TAU); ctx.fill();
   ctx.fillStyle = col; ctx.beginPath(); ctx.arc(vx, vy, 6.5, 0, TAU); ctx.fill();
   ctx.strokeStyle = T.ink; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(vx, vy, 6.5, 0, TAU); ctx.stroke();
-  const lab = 'You: ' + nf(avg, avg < 10 ? 1 : 0) + ' kg · ' + nf(D.wind.vMean, 1) + ' m/s';
+  const lab = 'You: ' + nf(avg, avg < 10 ? 1 : 0) + ' kg · ' + ax.you;
   const right = vx > padL + pw * 0.55;
   txt(ctx, lab, vx + (right ? -13 : 13), vy - 11, { font: '600 11px ' + F.mono, align: right ? 'right' : 'left', color: T.ink, halo: T.panel, haloW: 4 });
   if (hit.hoverV != null) {

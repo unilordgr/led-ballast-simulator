@@ -35,6 +35,10 @@
       <button class="chip" type="button" data-scn="noballast">No ballast</button>
       <button class="chip" type="button" data-scn="draft">Strong draught</button>
       <button class="chip" type="button" data-scn="front">Front draught</button>
+      <button class="chip" type="button" data-scn="door">Door gust</button>
+      <button class="chip" type="button" data-scn="knock">Knock</button>
+      <button class="chip" type="button" data-scn="wobble">Stage wobble</button>
+      <button class="chip" type="button" data-scn="quake">Earthquake</button>
       <button class="chip" type="button" data-scn="breeze">Outdoor breeze</button>
       <button class="chip" type="button" data-scn="gale">Outdoor gale</button>
       <button class="chip" type="button" data-scn="stage">On a stage</button>
@@ -50,8 +54,8 @@
         <div class="hud tl">
           <div class="pill" id="pill" data-s="stable" role="status"><svg class="ic"><use href="#i-check"/></svg><span id="pillText">Stable</span></div>
           <dl class="live" id="live">
-            <div><dt>Wind now</dt><dd id="liveWind">3.3 m/s</dd></div>
-            <div><dt>Force</dt><dd id="liveForce">68 kgf</dd></div>
+            <div><dt id="liveWindK">Wind now</dt><dd id="liveWind">3.3 m/s</dd></div>
+            <div><dt id="liveForceK">Force</dt><dd id="liveForce">68 kgf</dd></div>
             <div><dt>Tilt</dt><dd id="liveTilt">0.00°</dd></div>
             <div><dt>Top moves</dt><dd id="liveTop">0 mm</dd></div>
           </dl>
@@ -72,7 +76,7 @@
             <span><i style="background:var(--c-frame)"></i>Back frame</span>
             <span><i style="background:#e9b422"></i>Base plate</span>
             <span><i style="background:var(--c-ballast)"></i>Ballast</span>
-            <span><i style="background:#d6409f"></i>Wind force</span>
+            <span><i style="background:#d6409f"></i><em id="legForce" style="font-style:normal">Wind force</em></span>
             <span><i style="background:#ef4444"></i>Tipping pivot</span>
             <span id="legStrap"><i style="background:#ffb020"></i>Strap</span>
             <span id="legStage"><i style="background:#8a97a8"></i>Stage</span>
@@ -255,16 +259,129 @@
         </div>
       </section>
 
-      <section class="sec">
-        <h2>Wind</h2>
+      <section class="sec" id="secLoad">
+        <h2 id="loadH">Wind</h2>
+        <div id="indoorPick" hidden>
+          <div class="seg grid3" id="segCase" role="radiogroup" aria-label="What pushes on the wall indoors">
+            <button type="button" role="radio" aria-checked="true" data-v="draught" title="The sheet's allowance for moving air">Draught</button>
+            <button type="button" role="radio" aria-checked="false" data-v="door" title="A door opens and air rushes in for a moment">Door gust</button>
+            <button type="button" role="radio" aria-checked="false" data-v="knock" title="Someone leans on it, bumps it or pushes a trolley into it">Knock</button>
+            <button type="button" role="radio" aria-checked="false" data-v="sway" title="The deck wobbles under dancers or a crowd">Stage sway</button>
+            <button type="button" role="radio" aria-checked="false" data-v="quake" title="The ground shakes">Earthquake</button>
+            <button type="button" role="radio" aria-checked="false" data-v="notional" title="The sideways load building rules ask for when nothing else is known">Code min.</button>
+          </div>
+          <p class="hint" id="caseHint"></p>
+        </div>
         <div id="windIndoor">
           <div class="ctl">
-            <label for="SC-r">Wind scale <small id="SC-v"></small></label>
+            <label for="SC-r">Beaufort <small id="SC-v"></small></label>
             <div class="ctl-line" style="grid-template-columns:1fr"><input type="range" id="SC-r" min="0" max="10" step="1"></div>
             <p class="hint" id="SC-h"></p>
           </div>
         </div>
+        <div id="caseDoor" hidden>
+          <div class="ctl">
+            <label for="DG-n">Gust speed <small id="DG-v"></small></label>
+            <div class="ctl-line"><input type="range" id="DG-r" min="0" max="15" step="0.1" aria-label="Door gust speed slider"><span class="field"><input type="number" id="DG-n" min="0" max="30" step="0.1" inputmode="decimal"><span class="u">m/s</span></span></div>
+            <p class="hint" id="DG-h"></p>
+          </div>
+          <div class="ctl">
+            <label for="DD-n">Lasts</label>
+            <div class="ctl-line"><input type="range" id="DD-r" min="0.1" max="8" step="0.1" aria-label="Gust duration slider"><span class="field"><input type="number" id="DD-n" min="0.05" max="20" step="0.1" inputmode="decimal"><span class="u">s</span></span></div>
+            <p class="hint" id="DD-h"></p>
+          </div>
+        </div>
+        <div id="caseKnock" hidden>
+          <div class="ctl">
+            <div class="lab">Push comes from</div>
+            <div class="seg" id="segKFrom" role="radiogroup" aria-label="Which side the push comes from">
+              <button type="button" role="radio" aria-checked="true" data-v="both" title="Check both and report the weaker side">Worst side</button>
+              <button type="button" role="radio" aria-checked="false" data-v="front" title="From the audience side: tips the wall backward">Front</button>
+              <button type="button" role="radio" aria-checked="false" data-v="rear" title="From behind: tips the wall forward">Rear</button>
+            </div>
+          </div>
+          <div class="ctl">
+            <label for="KG-n">Push <small id="KG-v"></small></label>
+            <div class="ctl-line"><input type="range" id="KG-r" min="0" max="150" step="1" aria-label="Push force slider"><span class="field"><input type="number" id="KG-n" min="0" max="500" step="1" inputmode="decimal"><span class="u">kgf</span></span></div>
+            <div class="dirbtns" style="margin-top:8px">
+              <button type="button" class="btn sm" data-kg="20" data-kd="1.5" title="A person leaning on it">Lean 20</button>
+              <button type="button" class="btn sm" data-kg="50" data-kd="0.3" title="A hard shove or a stumble">Shove 50</button>
+              <button type="button" class="btn sm" data-kg="100" data-kd="0.15" title="A loaded trolley or flight case">Trolley 100</button>
+            </div>
+            <p class="hint" id="KG-h"></p>
+          </div>
+          <div class="ctl">
+            <label for="KH-n">Height of the push</label>
+            <div class="ctl-line"><input type="range" id="KH-r" min="0.3" max="6" step="0.1" aria-label="Height of the push slider"><span class="field"><input type="number" id="KH-n" min="0.1" max="20" step="0.1" inputmode="decimal"><span class="u">m</span></span></div>
+          </div>
+          <div class="ctl">
+            <label for="KD-n">Lasts</label>
+            <div class="ctl-line"><input type="range" id="KD-r" min="0.05" max="3" step="0.05" aria-label="Push duration slider"><span class="field"><input type="number" id="KD-n" min="0.05" max="10" step="0.05" inputmode="decimal"><span class="u">s</span></span></div>
+          </div>
+          <div class="ctl">
+            <label for="KS-n">Bases that share it</label>
+            <div class="ctl-line"><input type="range" id="KS-r" min="1" max="6" step="1" aria-label="Number of bases sharing the push slider"><span class="field"><input type="number" id="KS-n" min="1" max="60" step="1" inputmode="numeric"><span class="u">×</span></span></div>
+            <p class="hint" id="KS-h"></p>
+          </div>
+        </div>
+        <div id="caseSway" hidden>
+          <div class="ctl">
+            <label for="SA-n">Deck moves by <small id="SA-v"></small></label>
+            <div class="ctl-line"><input type="range" id="SA-r" min="0" max="30" step="0.5" aria-label="Sway amplitude slider"><span class="field"><input type="number" id="SA-n" min="0" max="100" step="0.5" inputmode="decimal"><span class="u">mm</span></span></div>
+            <div class="dirbtns" style="margin-top:8px">
+              <button type="button" class="btn sm" data-sa="2" data-sq="1.5" title="You can only just see it">Slight 2</button>
+              <button type="button" class="btn sm" data-sa="5" data-sq="1.5" title="Noticeable wobble underfoot">Wobble 5</button>
+              <button type="button" class="btn sm" data-sa="12" data-sq="2" title="A crowd jumping on the deck">Jumping 12</button>
+            </div>
+          </div>
+          <div class="ctl">
+            <label for="SQ-n">Back and forth</label>
+            <div class="ctl-line"><input type="range" id="SQ-r" min="0.3" max="5" step="0.1" aria-label="Sway frequency slider"><span class="field"><input type="number" id="SQ-n" min="0.1" max="10" step="0.1" inputmode="decimal"><span class="u">Hz</span></span></div>
+          </div>
+          <div class="ctl">
+            <label for="SB-n">Up and down too <small>share of g</small></label>
+            <div class="ctl-line"><input type="range" id="SB-r" min="0" max="0.5" step="0.01" aria-label="Bounce slider"><span class="field"><input type="number" id="SB-n" min="0" max="0.9" step="0.01" inputmode="decimal"><span class="u">g</span></span></div>
+            <p class="hint" id="SA-h"></p>
+          </div>
+        </div>
+        <div id="caseQuake" hidden>
+          <div class="ctl">
+            <label for="QP-n">Ground acceleration <small id="QP-v"></small></label>
+            <div class="ctl-line"><input type="range" id="QP-r" min="0.02" max="0.8" step="0.01" aria-label="Ground acceleration slider"><span class="field"><input type="number" id="QP-n" min="0.01" max="1.5" step="0.01" inputmode="decimal"><span class="u">g</span></span></div>
+            <div class="dirbtns" style="margin-top:8px">
+              <button type="button" class="btn sm" data-pga="0.16" title="Greek seismic zone I">Zone I 0.16</button>
+              <button type="button" class="btn sm" data-pga="0.24" title="Greek seismic zone II">Zone II 0.24</button>
+              <button type="button" class="btn sm" data-pga="0.36" title="Greek seismic zone III">Zone III 0.36</button>
+            </div>
+            <p class="hint" id="QP-h"></p>
+          </div>
+          <div class="ctl">
+            <label for="QF-n">Which floor <small id="QF-v"></small></label>
+            <div class="ctl-line"><input type="range" id="QF-r" min="1" max="2.5" step="0.05" aria-label="Building amplification slider"><span class="field"><input type="number" id="QF-n" min="1" max="4" step="0.05" inputmode="decimal"><span class="u">×</span></span></div>
+            <div class="dirbtns" style="margin-top:8px">
+              <button type="button" class="btn sm" data-qf="1">Ground floor</button>
+              <button type="button" class="btn sm" data-qf="1.75">Middle</button>
+              <button type="button" class="btn sm" data-qf="2.5">Top floor</button>
+            </div>
+          </div>
+          <div class="ctl">
+            <label for="QD-n">Shaking lasts</label>
+            <div class="ctl-line"><input type="range" id="QD-r" min="4" max="30" step="1" aria-label="Shaking duration slider"><span class="field"><input type="number" id="QD-n" min="3" max="60" step="1" inputmode="numeric"><span class="u">s</span></span></div>
+          </div>
+        </div>
+        <div id="caseNotional" hidden>
+          <div class="ctl">
+            <label for="NP-n">Sideways load <small>share of the weight</small></label>
+            <div class="ctl-line"><input type="range" id="NP-r" min="0.5" max="10" step="0.1" aria-label="Notional load slider"><span class="field"><input type="number" id="NP-n" min="0.1" max="30" step="0.1" inputmode="decimal"><span class="u">%</span></span></div>
+            <p class="hint" id="NP-h"></p>
+          </div>
+        </div>
         <div id="windOutdoor" hidden>
+          <div class="ctl">
+            <label for="BF-n">Beaufort <small id="BF-v"></small></label>
+            <div class="ctl-line"><input type="range" id="BF-r" min="0" max="12" step="1" aria-label="Beaufort force slider"><span class="field"><input type="number" id="BF-n" min="0" max="12" step="1" inputmode="numeric"><span class="u">Bft</span></span></div>
+            <p class="hint" id="BF-h"></p>
+          </div>
           <div class="ctl">
             <label for="V-n">Wind speed <small id="V-v"></small></label>
             <div class="ctl-line"><input type="range" id="V-r" min="0" max="40" step="0.5" aria-label="Wind speed slider"><span class="field"><input type="number" id="V-n" min="0" max="60" step="0.5" inputmode="decimal"><span class="u">m/s</span></span></div>
@@ -290,7 +407,7 @@
             <div class="ctl-line"><input type="range" id="FA-r" min="0" max="359" step="1" aria-label="Screen facing direction slider"><span class="field"><input type="number" id="FA-n" min="0" max="359" step="1" inputmode="numeric"><span class="u">°</span></span></div>
           </div>
         </div>
-        <div class="ctl">
+        <div class="ctl" id="ctlDir">
           <label for="DIR-n">Direction <small id="DIR-v"></small></label>
           <div class="ctl-line"><input type="range" id="DIR-r" min="0" max="359" step="1" aria-label="Wind direction slider"><span class="field"><input type="number" id="DIR-n" min="0" max="359" step="1" inputmode="numeric"><span class="u">°</span></span></div>
           <div class="dirbtns" style="margin-top:8px">
@@ -386,7 +503,7 @@
         </details>
       </figure>
       <figure class="fig">
-        <figcaption>Wind direction <span class="sub">drag the arrow</span></figcaption>
+        <figcaption><span id="planCap">Wind direction</span> <span class="sub" id="planSub">drag the arrow</span></figcaption>
         <canvas id="plan" role="img" aria-label="Plan view of the wall, its stage and straps, with a wind direction dial"></canvas>
         <div class="foot"><span id="planInfo"></span></div>
       </figure>
@@ -405,8 +522,14 @@
         <p class="vtext" id="vText" aria-live="polite"></p>
       </section>
 
+      <section class="sec" id="cmpSec" hidden>
+        <h2>Indoor loads compared <span class="sub">on your ballast</span></h2>
+        <div class="tablewrap" style="max-height:none;border-top:0"><table class="data cmp" id="cmpTable"><thead><tr><th>Load</th><th>Safety factor</th><th>Needs kg/base</th></tr></thead><tbody id="cmpRows"></tbody></table></div>
+        <p class="hint" id="cmpHint"></p>
+      </section>
+
       <section class="sec">
-        <h2>Ballast and wind limits</h2>
+        <h2 id="limH">Ballast and wind limits</h2>
         <div class="tiles">
           <div class="tile"><div class="k">Needed per base</div><div class="v" id="tNeedPer">9.06<small>kg</small></div><div class="s" id="tNeedTot"></div></div>
           <div class="tile"><div class="k">You have per base</div><div class="v" id="tYourPer">9.06<small>kg</small></div><div class="s" id="tYourTot"></div></div>
@@ -434,7 +557,7 @@
 
       <section class="sec">
         <h2>Moment balance <span class="sub">about the tipping toe, kg·m</span></h2>
-        <div class="mom-row"><span class="k">Wind × safety factor</span><span></span><span class="v" id="mWind">0</span></div>
+        <div class="mom-row"><span class="k" id="momK">Wind × safety factor</span><span></span><span class="v" id="mWind">0</span></div>
         <div class="mom" id="momWind"></div>
         <div class="mom-row"><span class="k">Resisting</span><span></span><span class="v" id="mRest">0</span></div>
         <div class="mom" id="momRest"></div>
@@ -449,7 +572,7 @@
       </section>
 
       <section class="sec">
-        <h2>Stability map <span class="sub">ballast per base against wind</span></h2>
+        <h2>Stability map <span class="sub" id="mapSub">ballast per base against wind</span></h2>
         <div class="mapwrap" id="mapWrap">
           <canvas id="map" role="img" aria-label="Chart of required ballast per base against wind speed, with your setup marked"></canvas>
           <div class="tip" id="mapTip" hidden></div>
@@ -460,7 +583,7 @@
           <span><b class="mono" style="color:var(--ink)">●</b> Your setup</span>
         </div>
         <details class="tv" style="margin:10px -16px -14px"><summary>Table view</summary>
-          <div class="tablewrap"><table class="data"><thead><tr><th>Wind (m/s)</th><th>Scale</th><th>Needed (kg/base)</th><th>Tips below (kg/base)</th></tr></thead><tbody id="mapRows"></tbody></table></div>
+          <div class="tablewrap"><table class="data"><thead><tr><th id="mapTh1">Wind (m/s)</th><th id="mapTh2">Beaufort</th><th>Needed (kg/base)</th><th>Tips below (kg/base)</th></tr></thead><tbody id="mapRows"></tbody></table></div>
         </details>
       </section>
     </aside>
@@ -484,12 +607,18 @@
     <b>How it works.</b> The wind pushes on the whole screen at half its height plus 0.1 m. The screen, the back frame and the ballast try to hold it down about the toe of the base.
     Following the sheet: <code>wind force × arm × safety factor = screen + frame + ballast moments</code>.
     With wind from the rear the toe is under the screen (screen arm 0, frame arm 0.46 m, ballast arm 0.862 m). With wind from the front the toe is at the rear of the base (screen arm 0.922 m, frame and ballast 0.46 m).
-    Wind pressure is ½·1.25·v² (the sheet's table). Angled wind counts by cos θ. Outdoors, gusts raise the design wind to the peak speed, and the animation replays them.
+    Wind pressure is ½·1.25·v² (the sheet's table). The sheet's wind scale is the Beaufort scale, and picking a Beaufort force here uses the top of its speed range (force 6 is 13.8 m/s). Angled wind counts by cos θ. Outdoors, gusts raise the design wind to the peak speed, and the animation replays them.
+    <b>Indoors, wind is not the real load.</b> Air in a hall hardly moves, so the sheet's wind scale really stands in for sideways loads nobody has measured: a draught, a bump, a wobbling floor. Here you can pick them one by one.
+    A <i>door gust</i> is air at your speed for a few seconds. A <i>knock</i> is a push at one height shared by a few bases (the ergonomic limit for a whole-body push is about 23 kgf, and a braced person can reach about 70 kgf; CCOHS).
+    <i>Stage sway</i> moves the deck back and forth by a few millimetres, so every mass feels the acceleration (2π·f)²·amplitude. An <i>earthquake</i> shakes the ground; the Greek seismic zones design for 0.16, 0.24 and 0.36 g (Greek National Annex to Eurocode 8), and a rigid object on an upper floor feels up to 2.5 times the ground (EN 1998-1, 4.3.5).
+    The <i>code minimum</i> is the sideways load that temporary-works rules such as BS 5975 ask for when nothing else is known: 2.5% of the vertical load, a stand-in for out-of-plumb and rough handling.
+    For shaking the force on each mass is its weight times the acceleration, so the ballast itself is shaken too, and the wall can tip either way: the screen side is the weak one, because the screen's weight sits at the front toe. With "Auto" the ballast goes where it helps most: at the rear end for a forward tip, in the middle when the load can come from both sides.
+    The safety factor is the ratio of the tipping acceleration (or push, or gust) to yours, as in the sheet. It treats the load as steady, so it is cautious for short loads: the animation also lets the wall rock, and a brief gust or push that lifts the wall can leave it standing. A sudden load on a strapped wall can double the strap's pull, which the static number does not show.
     <b>Straps and stage.</b> A strap, cable or truss is a spring from the screen to an anchor. The wall is also a cantilever that bends, so the strap only pulls as hard as the wall moves it, plus the lift of the base. The program finds the largest wind the wall can take before a strap reaches its rated load or the wall passes its tipping point.
     On a stage it checks two ways of failing and shows the worse: the wall tipping on the deck, and the stage and wall tipping together about the stage edge.
     <b>Assumptions.</b> Straps are hand-tight with no slack: a loose strap lets the wall start to fall before it pulls and then takes a shock load, so keep them tight. Bending stiffness is illustrative (about two 50×50×3 aluminium posts 0.38 m apart per base), set it to your frame in Advanced. Ratchet straps stretch up to 7% at rated load (EN 12195-2), steel cable 0.4%, a truss 0.03%.
     Steeldeck stage decks are rated about 7.5 kN/m². Frame strength, cabinet locks, anchors and ground are not checked. Sliding is an extra check; the sheet assumes enough friction.
-    Scale 1 in the sheet's table lists 0.14 N/m² for 1.5 m/s, which should be 1.4, so 1.4 is used here.
+    Beaufort 1 in the sheet's table lists 0.14 N/m² for 1.5 m/s, which should be 1.4, so 1.4 is used here.
     Cabinet weights come from Unilumin datasheets (Uslim4 13 kg, Uslim2 7.8 kg, USlim-O3 14.8 kg, USlim-O4 32 to 34 kg) and a distributor listing (UGC 5.6 kg).
     <b>This is a rough reference.</b> As the sheet itself says, it cannot replace a structural simulation or a practical test. Use it to see how a wall reacts and to size a first guess, and have a qualified rigger or engineer approve any real installation.
   </p>

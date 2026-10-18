@@ -51,13 +51,50 @@ function drawIndoor(ctx, V, env) {
     ctx.beginPath(); ctx.moveTo(x - 5, th); ctx.lineTo(x + 5, th); ctx.lineTo(x + rad * 0.62, th + rad * 1.6); ctx.lineTo(x - rad * 0.62, th + rad * 1.6); ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#d9e4f2'; ctx.fillRect(x - 5, th, 10, 3);
   }
-  // floor
+  // floor (drawn wider than the picture, because it moves when the floor shakes)
+  ctx.save(); ctx.translate(env.gx || 0, 0);
   g = ctx.createLinearGradient(0, oy, 0, h);
   g.addColorStop(0, '#28343f'); g.addColorStop(1, '#0a0e14');
-  ctx.fillStyle = g; ctx.fillRect(0, oy, w, h - oy);
-  ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.fillRect(0, oy, w, 1);
+  ctx.fillStyle = g; ctx.fillRect(-80, oy, w + 160, h - oy);
+  ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.fillRect(-80, oy, w + 160, 1);
   floorRuler(ctx, V, 'rgba(190,210,235,.55)');
-  drawFan(ctx, V, env);
+  ctx.restore();
+  if (env.kind === 'door') drawDoor(ctx, V, env);
+  else if (env.kind === 'knock') drawPerson(ctx, V, env);
+  else if (env.kind === 'draught' || env.kind === undefined) drawFan(ctx, V, env);
+}
+
+/* a door that swings open when the gust comes */
+function drawDoor(ctx, V, env) {
+  const { oy, s, w } = V, dirS = env.sign, open = clamp(env.amt, 0, 1);
+  const x = clamp(V.ox - dirS * 4.8 * s, 40, w - 40), dw = 0.95 * s, dh = Math.min(2.15 * s, oy * 0.6);
+  if (open > 0.02) {                                                      // light and air coming through
+    const lg = ctx.createLinearGradient(x, 0, x + dirS * 4.5 * s, 0);
+    lg.addColorStop(0, 'rgba(255,238,200,' + (0.22 * open).toFixed(3) + ')'); lg.addColorStop(1, 'rgba(255,238,200,0)');
+    ctx.fillStyle = lg; ctx.beginPath(); ctx.moveTo(x, oy - dh); ctx.lineTo(x + dirS * 4.5 * s, oy - dh * 0.5); ctx.lineTo(x + dirS * 4.5 * s, oy); ctx.lineTo(x, oy); ctx.closePath(); ctx.fill();
+  }
+  ctx.fillStyle = '#0a0e16'; ctx.fillRect(x - dw / 2, oy - dh, dw, dh);
+  ctx.strokeStyle = 'rgba(190,210,235,.55)'; ctx.lineWidth = 2; ctx.strokeRect(x - dw / 2, oy - dh, dw, dh);
+  const hinge = x - dirS * dw / 2, shrink = 1 - 0.8 * open;               // the leaf, seen from the side, swings away
+  ctx.fillStyle = '#3a4a5e'; ctx.beginPath();
+  ctx.moveTo(hinge, oy - dh); ctx.lineTo(hinge + dirS * dw * shrink, oy - dh + 0.05 * s * open); ctx.lineTo(hinge + dirS * dw * shrink, oy); ctx.lineTo(hinge, oy); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#8fb0d6'; ctx.beginPath(); ctx.arc(hinge + dirS * dw * shrink * 0.86, oy - dh * 0.46, 2.4, 0, TAU); ctx.fill();
+  txt(ctx, 'door', x, oy - dh - 7, { font: '600 10px ' + F.sans, align: 'center', color: 'rgba(190,210,235,.8)' });
+}
+
+/* someone pushing on the wall */
+function drawPerson(ctx, V, env) {
+  const { oy, s } = V, sg = env.pushSign || 1, amt = clamp(env.amt, 0, 1), hk = env.pushH;
+  if (hk > 2.3) return;                                                   // too high for a person to reach
+  const contactX = V.X(sg > 0 ? -0.67 : 0.05);
+  const fx = contactX - sg * (0.45 + 0.4 * (1 - amt * 0.6)) * s, lean = 0.22 * (0.35 + amt) * sg;
+  const hip = [fx + lean * 0.5 * s, oy - 0.95 * s], sh = [fx + lean * 1.2 * s, oy - 1.5 * s], head = [sh[0] + lean * 0.25 * s, oy - 1.7 * s];
+  ctx.strokeStyle = 'rgba(206,220,240,.85)'; ctx.fillStyle = 'rgba(206,220,240,.85)'; ctx.lineWidth = Math.max(2.5, 0.09 * s); ctx.lineCap = 'round';
+  line(ctx, fx - sg * 0.2 * s, oy, hip[0], hip[1]); line(ctx, fx + sg * 0.14 * s, oy, hip[0], hip[1]);
+  line(ctx, hip[0], hip[1], sh[0], sh[1]);
+  line(ctx, sh[0], sh[1] + 0.05 * s, contactX - sg * 4, V.Y(Math.min(hk, 2.1)));
+  ctx.beginPath(); ctx.arc(head[0], head[1], 0.12 * s, 0, TAU); ctx.fill();
+  ctx.lineCap = 'butt';
 }
 
 function floorRuler(ctx, V, col) {

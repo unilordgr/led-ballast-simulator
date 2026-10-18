@@ -19,7 +19,7 @@ function nf(v, d) {
   const [a, b] = s.split('.');
   return a.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (b ? '.' + b : '');
 }
-const nf0 = (v) => nf(v, 0), nf1 = (v) => nf(v, 1), nf2 = (v) => nf(v, 2);
+const nf0 = (v) => nf(v, 0), nf1 = (v) => nf(v, 1), nf2 = (v) => nf(v, 2), nf3 = (v) => nf(v, 3);
 function niceMax(v) {
   if (!(v > 0)) return 1;
   const e = Math.pow(10, Math.floor(Math.log10(v)));

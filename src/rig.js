@@ -23,7 +23,7 @@ function ballastPlates(kg) {
 
 /* instantaneous elastic deflection (m, in the tipping direction) at each beam node, from the live wind and strap force */
 function bendNow(D, sim) {
-  const b = D.bend, lam = sim.lam || 0, Ph = sim.Ph || 0;
+  const b = D.bend, lam = sim.lamB !== undefined ? sim.lamB : (sim.lam || 0), Ph = sim.Ph || 0;
   return b.nodeZ.map((z, k) => lam * b.dp1[k] - Ph * b.Gat[k]);
 }
 function bendExag(D, mode) {                         // visual exaggeration: auto makes a few per cent of the height visible
@@ -68,7 +68,8 @@ function bentStrip(ctx, V, xc, wpx, yb, yt, off, fill, seg) {
 function drawRig(ctx, V, st, o) {
   const { S, D, sim } = st, g = D.geom, rear = D.dir === 'rear';
   const X = V.X, Y = V.Y, s = V.s, y0 = M.SHEET.screenBottom, cabH = D.cabH;
-  const pivotX = rear ? 0 : -g.depth, rot = o.rotate === false ? 0 : (rear ? 1 : -1) * sim.phi;
+  const sd = sim.side || (rear ? 1 : -1);                           // which toe it tips about: +1 front, -1 rear
+  const pivotX = sd > 0 ? 0 : -g.depth, rot = o.rotate === false ? 0 : sd * sim.phi;
   const off = o.off || (() => 0);
   const px = (m, mn) => Math.max(m * s, mn);
   const scrDepth = S.cabDepth || 0.083;
@@ -150,10 +151,10 @@ function drawStage(ctx, V, st, ink) {
   const x0 = V.X(stg.xRear), x1 = V.X(stg.xFront), yT = V.Y(stg.h), yB = V.Y(0), s = V.s;
   const th = Math.max(4, 0.09 * s);
   ctx.strokeStyle = 'rgba(170,188,212,.55)'; ctx.lineWidth = Math.max(1.5, 0.05 * s);
-  const nLeg = Math.max(2, Math.round(stg.depth / 1.2) + 1);
-  for (let i = 0; i < nLeg; i++) { const x = x0 + (x1 - x0) * i / (nLeg - 1); line(ctx, x, yT + th, x, yB); }
+  const nLeg = Math.max(2, Math.round(stg.depth / 1.2) + 1), sh = st.legShear || 0;     // sh: the feet stay on the floor while the deck sways
+  for (let i = 0; i < nLeg; i++) { const x = x0 + (x1 - x0) * i / (nLeg - 1); line(ctx, x, yT + th, x + sh, yB); }
   ctx.lineWidth = 1;
-  for (let i = 0; i < nLeg - 1; i++) { const xa = x0 + (x1 - x0) * i / (nLeg - 1), xb = x0 + (x1 - x0) * (i + 1) / (nLeg - 1); line(ctx, xa, yB, xb, yT + th); line(ctx, xb, yB, xa, yT + th); }
+  for (let i = 0; i < nLeg - 1; i++) { const xa = x0 + (x1 - x0) * i / (nLeg - 1), xb = x0 + (x1 - x0) * (i + 1) / (nLeg - 1); line(ctx, xa + sh, yB, xb, yT + th); line(ctx, xb + sh, yB, xa, yT + th); }
   const sk = ctx.createLinearGradient(0, yT, 0, yB); sk.addColorStop(0, C.stage0); sk.addColorStop(1, C.stage1);
   ctx.fillStyle = sk; ctx.fillRect(x1 - Math.max(5, 0.12 * s), yT + th, Math.max(5, 0.12 * s), yB - yT - th);
   ctx.fillStyle = C.deck; ctx.fillRect(x0, yT, x1 - x0, th);
@@ -167,7 +168,7 @@ function drawStage(ctx, V, st, ink) {
 function drawStrap(ctx, V, st, ink, offA) {
   const { S, D, sim } = st, sp = D.strap; if (!sp) return;
   const hs = D.geom.hs, sMode = D.gov === 'S', rear = D.dir === 'rear', sign = rear ? 1 : -1;
-  const rot = sign * sim.phi;
+  const rot = (sim.side || sign) * sim.phi;
   let ax = sp.attachX + sign * offA, ay = sp.a + hs;
   const pivX = D.geom.pivotX, pivY = sMode ? 0 : hs;
   if (rot) { const dx = ax - pivX, dy = ay - pivY, c = Math.cos(rot), sn = Math.sin(rot); ax = pivX + dx * c + dy * sn; ay = pivY - dx * sn + dy * c; }
@@ -216,7 +217,8 @@ function drawStrap(ctx, V, st, ink, offA) {
 
 /* arms, weights and the lift gap, drawn unrotated and faded out once the screen tilts */
 function drawBaseNotes(ctx, V, st, ink, fade, o) {
-  const { S, D, sim, ui } = st, g = D.geom, X = V.X, Y = V.Y, s = V.s, rear = D.dir === 'rear';
+  const { S, D, sim, ui } = st, g = D.geom, X = V.X, Y = V.Y, s = V.s;
+  const rear = (sim.side || (D.dir === 'rear' ? 1 : -1)) > 0;       // the toe it tips about now (front toe when true)
   const sMode = D.gov === 'S';
   const pivotX = rear ? 0 : -g.depth;
   const kgB = ui.selected >= 0 && ui.selected < D.N ? D.ballast[ui.selected] : D.Wb / D.N;
@@ -249,8 +251,10 @@ function drawBaseNotes(ctx, V, st, ink, fade, o) {
   }
   const pX = X(pivotX), pY = Y(0);
   if (!sMode) {
-    ctx.fillStyle = ink.pivot; ctx.beginPath(); ctx.moveTo(pX, pY + 1); ctx.lineTo(pX - 6, pY + 11); ctx.lineTo(pX + 6, pY + 11); ctx.closePath(); ctx.fill();
-    txt(ctx, 'pivot', pX + (rear ? 9 : -9), pY + 22, { font: '600 10px ' + F.sans, align: rear ? 'left' : 'right', color: ink.text, halo: ink.halo, haloW: 3 });
+    const tri = (x) => { ctx.fillStyle = ink.pivot; ctx.beginPath(); ctx.moveTo(x, pY + 1); ctx.lineTo(x - 6, pY + 11); ctx.lineTo(x + 6, pY + 11); ctx.closePath(); ctx.fill(); };
+    tri(pX);
+    if (D.shake && sim.phi < 0.0008) { tri(X(rear ? -g.depth : 0)); txt(ctx, 'toes', X(-g.depth / 2), pY + 22, { font: '600 10px ' + F.sans, align: 'center', color: ink.text, halo: ink.halo, haloW: 3 }); }   // it can tip about either
+    else txt(ctx, 'pivot', pX + (rear ? 9 : -9), pY + 22, { font: '600 10px ' + F.sans, align: rear ? 'left' : 'right', color: ink.text, halo: ink.halo, haloW: 3 });
   }
   if (!sMode && sim.phi > 0.0008) {
     const rotA = (rear ? 1 : -1) * sim.phi, farX = rear ? -g.depth : 0;
@@ -263,6 +267,29 @@ function drawBaseNotes(ctx, V, st, ink, fade, o) {
   }
 }
 
+/* the push, or the inertia of a shaking wall, in place of the wind arrows */
+function drawLoadArrows(ctx, V, st, ink, fade) {
+  const { S, D, sim } = st, g = D.geom, L = sim.lam, a = Math.abs(L);
+  if (a < 0.01 || fade < 0.02) return;
+  const sgn = D.shake ? (L >= 0 ? 1 : -1) : (D.dir === 'rear' ? 1 : -1);          // +1 pushes toward the front (right on screen)
+  const hy = V.Y(g.hc);
+  ctx.save(); ctx.globalAlpha = fade; ctx.strokeStyle = ink.force; ctx.fillStyle = ink.force; ctx.lineCap = 'round';
+  if (D.loadKind === 'force') {
+    const kg = S.knock.kgf * a, contact = V.X(sgn > 0 ? -0.67 : 0.05), len = clamp(26 + 0.8 * kg, 30, 130), tail = contact - sgn * (len + 8);
+    ctx.lineWidth = 4.5; arrow(ctx, tail, hy, contact - sgn * 8, hy, 13, 8);
+    ctx.beginPath(); ctx.arc(tail, hy, 6.5, 0, TAU); ctx.fill();                       // the hand or the trolley
+    txt(ctx, 'push ' + nf0(kg) + ' kgf', (tail + contact) / 2, hy - 13, { font: '600 12px ' + F.mono, align: 'center', color: ink.force, halo: ink.halo, haloW: 3.5 });
+  } else {
+    const Fk = D.F.kgf * a, x0 = V.X(-0.3), len = clamp(22 + 46 * Math.sqrt(a), 24, 120);
+    ctx.lineWidth = 4; arrow(ctx, x0, hy, x0 + sgn * len, hy, 13, 8);
+    txt(ctx, 'inertia ' + nf0(Fk) + ' kgf', x0 + sgn * len / 2, hy - 12, { font: '600 12px ' + F.mono, align: 'center', color: ink.force, halo: ink.halo, haloW: 3.5 });
+    const fy = V.Y(0) + 26, xm = V.X(-g.depth / 2), fl = clamp(14 + 40 * Math.sqrt(a), 16, 90);   // the floor goes the other way
+    ctx.strokeStyle = ink.dim; ctx.fillStyle = ink.dim; ctx.lineWidth = 2.4; arrow(ctx, xm + sgn * fl / 2, fy, xm - sgn * fl / 2, fy, 9, 6);
+    txt(ctx, 'floor', xm - sgn * (fl / 2 + 6), fy + 4, { font: '600 10px ' + F.sans, align: sgn > 0 ? 'right' : 'left', color: ink.text, halo: ink.halo, haloW: 3 });
+  }
+  ctx.restore();
+}
+
 /* wind arrows on the windward face, the resultant, and the height dimensions on the lee side (rig view) */
 function drawWindNotes(ctx, V, st, ink, u) {
   const { S, D, sim } = st, g = D.geom, rear = D.dir === 'rear', sign = rear ? 1 : -1;
@@ -271,7 +298,8 @@ function drawWindNotes(ctx, V, st, ink, u) {
   const fade = 1 - smooth((sim.phi - 0.12) / 0.5);
   const y0 = M.SHEET.screenBottom, hs = g.hs;
   const alpha = D.profileAlpha || 0;
-  if (pStrength > 0.005 && fade > 0.02) {
+  if (D.loadKind !== 'wind') drawLoadArrows(ctx, V, st, ink, fade);
+  else if (pStrength > 0.005 && fade > 0.02) {
     const n = clamp(Math.round(S.H), 3, 14);
     ctx.globalAlpha = fade; ctx.strokeStyle = ink.arrow; ctx.fillStyle = ink.arrow; ctx.lineWidth = 1.6;
     for (let j = 0; j < n; j++) {
@@ -313,8 +341,14 @@ function drawSide(canvas, st) {
   Vr.Y = (y) => Vr.oy - y * V.s;
   const ink = INK[outdoor ? 'outdoor' : 'indoor'];
   const u = sim.lastU, sign = D.dir === 'rear' ? 1 : -1;
-  const vNow = D.wind.vPeak * u, vNormal = vNow * D.wind.cn;
-  const env = { sign, vmean: vNow, speed: vNormal, outdoor };
+  const sd = sim.side || sign, windy = D.loadKind === 'wind';                      // sd: the toe it tips about now
+  const exagG = sim.groundAmp > 0 ? clamp(0.2 / sim.groundAmp, 1, 200) : 1;        // the floor's movement is tiny: draw it larger
+  const gx = sim.groundAmp > 0 ? sim.ground * sim.groundAmp * exagG * V.s : 0;
+  const vNow = windy ? D.wind.vPeak * u : 0, vNormal = windy ? vNow * D.wind.cn : 0;
+  const deckSway = D.loadCase === 'sway' && !!D.stage;                             // the deck wobbles on legs that stay on the floor
+  st.legShear = deckSway ? -gx : 0;
+  const env = { sign, vmean: vNow, speed: vNormal, outdoor, kind: D.loadCase, gx: deckSway ? 0 : gx, amt: windy ? u : Math.abs(sim.lam),
+    pushSign: D.shake ? (sim.pushDir || 1) : sign, pushH: D.geom.hc };
   const nodesNow = bendNow(D, sim), exag = bendExag(D, ui.exag);
   st.exag = exag; st.nodesNow = nodesNow;
   const off = offFn(st, V, nodesNow, exag);
@@ -325,14 +359,15 @@ function drawSide(canvas, st) {
   }
   if (outdoor) drawOutdoor(ctx, V, env); else drawIndoor(ctx, V, env);
   const topY = V.oy - (hs + (S.H + 0.1) * Math.cos(sim.phi) + 0.35) * V.s;
-  drawParticles(ctx, V, env, topY);
+  if (windy) drawParticles(ctx, V, env, topY);
+  const pivS = D.shake ? (sd > 0 ? D.sides.fwd.geom.pivotX : D.sides.back.geom.pivotX) : D.geom.pivotX;
 
   // stage + rig. In stage mode the whole thing rocks about the stage toe; otherwise only the wall rocks on its deck.
+  ctx.save(); ctx.translate(gx, 0);                              // everything standing on the floor goes with it when the floor shakes
   ctx.save();
   if (outdoor) { ctx.shadowColor = 'rgba(6,18,30,.55)'; ctx.shadowBlur = 5; }
   if (sMode && sim.phi) {
-    const rotS = sign * sim.phi;
-    ctx.translate(V.X(D.geom.pivotX), V.Y(0)); ctx.rotate(rotS); ctx.translate(-V.X(D.geom.pivotX), -V.Y(0));
+    ctx.translate(V.X(pivS), V.Y(0)); ctx.rotate(sd * sim.phi); ctx.translate(-V.X(pivS), -V.Y(0));
   }
   drawStage(ctx, V, st, ink);
   drawRig(ctx, Vr, st, { detail: false, rotate: !sMode, off });
@@ -341,11 +376,11 @@ function drawSide(canvas, st) {
   drawWindNotes(ctx, Vr, st, ink, u);
   drawBaseNotes(ctx, Vr, st, ink, 0, { arms: false });
   if (sMode) {                                                   // stage rocks: pivot marker on the floor and the lift at the far edge
-    const pX = V.X(D.geom.pivotX), pY = V.Y(0), rear = D.dir === 'rear';
+    const pX = V.X(pivS), pY = V.Y(0), rear = sd > 0;
     ctx.fillStyle = ink.pivot; ctx.beginPath(); ctx.moveTo(pX, pY + 1); ctx.lineTo(pX - 6, pY + 11); ctx.lineTo(pX + 6, pY + 11); ctx.closePath(); ctx.fill();
     txt(ctx, 'pivot', pX + (rear ? 9 : -9), pY + 22, { font: '600 10px ' + F.sans, align: rear ? 'left' : 'right', color: ink.text, halo: ink.halo, haloW: 3 });
     if (sim.phi > 0.0008) {
-      const rotA = sign * sim.phi, farX = rear ? D.stage.xRear : D.stage.xFront, dx = (farX - D.geom.pivotX) * V.s, c = Math.cos(rotA), sn = Math.sin(rotA);
+      const rotA = sd * sim.phi, farX = rear ? D.stage.xRear : D.stage.xFront, dx = (farX - pivS) * V.s, c = Math.cos(rotA), sn = Math.sin(rotA);
       const fx = pX + dx * c, fy = pY + dx * sn, lm = Math.sin(sim.phi) * D.stage.depth * 1000;
       ctx.strokeStyle = '#ffd24a'; ctx.lineWidth = 1.6; line(ctx, fx, pY, fx, fy); line(ctx, fx - 4, pY, fx + 4, pY); line(ctx, fx - 4, fy, fx + 4, fy);
       txt(ctx, 'stage lifts ' + nf(lm, lm < 100 ? 1 : 0) + ' mm', fx + (rear ? -8 : 8), (fy + pY) / 2 + 3, { font: '600 10.5px ' + F.mono, align: rear ? 'right' : 'left', color: '#ffe9a8', halo: ink.halo, haloW: 3 });
@@ -354,6 +389,8 @@ function drawSide(canvas, st) {
   if (st.exag > 1.5 && Math.abs(D.bend.topEl) > 1e-5) {
     txt(ctx, 'bending drawn ×' + nf0(st.exag), V.X(D.dir === 'rear' ? 0.38 : -D.geom.depth - 0.38) + (D.dir === 'rear' ? 7 : -7), Vr.Y(S.H + 0.1) + 18, { font: '500 10px ' + F.mono, align: D.dir === 'rear' ? 'left' : 'right', color: ink.text, halo: ink.halo, haloW: 3 });
   }
+  ctx.restore();                                                 // the floor's shake
+  if (exagG > 1.5) txt(ctx, (deckSway ? 'deck' : 'floor') + ' shaking drawn ×' + nf0(exagG), V.w - 12, V.oy + 42, { font: '500 10px ' + F.mono, align: 'right', color: ink.text, halo: ink.halo, haloW: 3 });
   ctx.restore();
   if (sim.toppled && sim.phi > 1.2) {
     ctx.fillStyle = 'rgba(208,59,59,.12)'; ctx.fillRect(0, 0, w, h);

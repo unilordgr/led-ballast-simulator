@@ -15,6 +15,14 @@ for (let it = 0; it < 4000; it++) {
   S.ballastAuto = rnd() < 0.4; S.ballastPer = pick([0, 5, 50, 300, 2000]); S.ballast = null; S.ballastPos = pick(['auto', 'rear', 'mid']);
   if (rnd() < 0.5) S.stage = { on: true, h: R(0.2, 3), depth: R(2, 12), extra: 2, front: R(0.3, 6), deckKgm2: R(10, 120), rating: 750, muDeck: R(0.2, 0.8), muFloor: R(0.2, 0.8) };
   if (rnd() < 0.6) S.rest = { type: pick(['strap', 'cable', 'truss']), n: Math.floor(R(0, 12)), a: pick([0, R(0.5, 8)]), d: pick([0, R(1, 12)]), to: pick(['floor', 'deck']), wll: R(200, 8000), slack: 0, anchorKg: pick([0, 0, R(10, 800)]), side: pick(['rear', 'front', 'both']) };
+  if (S.mode === 'indoor') {                         // indoor: the sheet's draught, or one of the other indoor loads
+    S.indoorCase = pick(['draught', 'draught', 'door', 'knock', 'sway', 'quake', 'notional']);
+    S.door = { v: R(0, 15), dur: R(0.2, 6) };
+    S.knock = { kgf: R(0, 120), h: R(0.3, 7), from: pick(['front', 'rear', 'both']), dur: R(0.1, 2), share: Math.floor(R(1, 6)) };
+    S.sway = { amp: R(0, 20), f: R(0.5, 4), bounce: R(0, 0.5) };
+    S.quake = { pga: R(0.02, 0.6), floor: R(1, 2.5), dur: R(4, 20) };
+    S.notional = { pct: R(0.5, 10) };
+  }
   // the UI clamps these before calling derive
   S.stage.front = Math.min(S.stage.front, Math.max(0.3, S.stage.depth - S.depth - 0.15));
   S.N = Math.min(S.N, Math.round(S.W / 0.5));
@@ -26,15 +34,18 @@ for (let it = 0; it < 4000; it++) {
   for (const v of D.bend.defl) finite('defl', v, S); for (const v of D.bend.bm) finite('bm', v, S);
   if (D.SFact < 0) { bad++; console.log('NEGATIVE SF', D.SFact); }
   // wind: more wind never raises the safety factor (check through sfOf: ballast more never lowers it)
+  // (not for shaking: ballast is also mass that gets shaken, so ballast close to the pivot can lower the safety factor)
   const a = D.sfOf(10 * D.N), b = D.sfOf(500 * D.N);
-  if (b < a * 0.995 - 1e-6) { bad++; if (bad < 12) console.log('NON-MONOTONE in ballast', a, b, JSON.stringify(S)); }
+  if (D.loadKind !== 'accel' && b < a * 0.995 - 1e-6) { bad++; if (bad < 12) console.log('NON-MONOTONE in ballast', a, b, JSON.stringify(S)); }
   // short sim: no NaN, tilt stays in [0, pi/2]
   const sim = new M.Sim(); sim.setRig(D, S); sim.reset();
   for (let i = 0; i < 240 * 4; i++) sim.step(1 / 240);
   finite('phi', sim.phi, S); finite('Ph', sim.Ph, S);
   if (sim.phi < -1e-9 || sim.phi > Math.PI / 2 + 1e-9) { bad++; console.log('PHI OUT OF RANGE', sim.phi); }
   // consistency between static verdict and dynamics: a stable verdict (peak load) must not topple
-  if (D.SFact >= 1.3 && sim.toppled) { bad++; if (bad < 12) console.log('STATIC OK BUT TOPPLED', D.SFact, D.gov, JSON.stringify({ rest: S.rest, stage: S.stage.on })); }
+  // (a push or a shake arrives suddenly: a strap that catches the wall can see up to twice its static pull, so with straps ask for more margin)
+  const margin = D.loadKind !== 'wind' && D.strap ? 2.3 : 1.3;
+  if (D.SFact >= margin && sim.toppled) { bad++; if (bad < 12) console.log('STATIC OK BUT TOPPLED', D.SFact, D.gov, D.loadCase, JSON.stringify(S)); }
 }
 console.log('fuzz cases', n, 'problems', bad);
 process.exit(bad ? 1 : 0);

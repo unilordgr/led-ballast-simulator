@@ -32,10 +32,13 @@ function drawFront(canvas, st) {
   const tipDir = D.dir === 'rear' ? 1 : -1, sMode = D.gov === 'S';
   const dep = S.cabDepth || 0.083, cabH = D.cabH;
   const exag = st.exag || bendExag(D, ui.exag), nodes = st.nodesNow || bendNow(D, sim), Kn = nodes.length - 1;
-  const t = st.t, u = sim.lastU, vNow = D.wind.vPeak * u;
+  const windy = D.loadKind === 'wind';
+  const t = st.t, u = sim.lastU, vNow = windy ? D.wind.vPeak * u : 0;
   const defl = (y) => { const f = clamp(y / L, 0, 1) * Kn, i = Math.min(Kn - 1, Math.floor(f)), k = f - i; return nodes[i] * (1 - k) + nodes[i + 1] * k; };
-  const th = tipDir * sim.phi, cth = Math.cos(th), sth = Math.sin(th);
-  const pivZ = D.geom.pivotX, pivY = sMode ? 0 : hs;
+  const sd = sim.side || tipDir;                                              // the toe it tips about now
+  const th = sd * sim.phi, cth = Math.cos(th), sth = Math.sin(th);
+  const pivZ = D.shake ? (sd > 0 ? D.sides.fwd.geom.pivotX : D.sides.back.geom.pivotX) : D.geom.pivotX, pivY = sMode ? 0 : hs;
+  const gz = sim.groundAmp > 0 ? sim.ground * sim.groundAmp * clamp(0.2 / sim.groundAmp, 1, 200) : 0;   // the floor shaking, drawn larger than it is
   const rot3 = (p) => { if (!th) return p; const dZ = p[2] - pivZ, dY = p[1] - pivY; return [p[0], pivY + dY * cth - dZ * sth, pivZ + dZ * cth + dY * sth]; };
   const wallPt = (x, y, z0) => rot3([x, hs + y, z0 + tipDir * exag * defl(clamp(y, 0, L))]);
 
@@ -47,7 +50,7 @@ function drawFront(canvas, st) {
   for (const x of [-W / 2, W / 2]) for (const y of [hs, hs + L]) fitPts.push([x, y, 0], [x, y, -1]);
   if (stg) for (const x of [-stg.width / 2 - 0.2, stg.width / 2 + 0.2]) for (const z of [stg.xRear, stg.xFront]) fitPts.push([x, 0, z], [x, hs, z]);
   const fit = cameraFit(cam, fitPts, w, h, { l: 70, r: 70, t: 56, b: 46 });
-  const P = (p) => { const v = v3sub(p, cam.C), zc = v3dot(v, cam.f); return [fit.ox + v3dot(v, cam.r) / zc * fit.fpx, fit.oy - v3dot(v, cam.u) / zc * fit.fpx, zc]; };
+  const P = (p) => { const v = v3sub([p[0], p[1], p[2] + gz], cam.C), zc = v3dot(v, cam.f); return [fit.ox + v3dot(v, cam.r) / zc * fit.fpx, fit.oy - v3dot(v, cam.u) / zc * fit.fpx, zc]; };
   st.fcam = { cam, fit };
 
   // ---- backdrop
@@ -70,7 +73,7 @@ function drawFront(canvas, st) {
 
   // ---- wind streaks that stay behind the wall
   const wallC = P([0, hs + L / 2, 0]);
-  streaks(ctx, P, fview, st, W, H + hs, wallC[2], true, vNow);
+  if (windy) streaks(ctx, P, fview, st, W, H + hs, wallC[2], true, vNow);
 
   // ---- stage
   if (stg) {
@@ -157,7 +160,7 @@ function drawFront(canvas, st) {
   }
 
   // ---- wind streaks in front of the wall
-  streaks(ctx, P, fview, st, W, H + hs, wallC[2], false, vNow);
+  if (windy) streaks(ctx, P, fview, st, W, H + hs, wallC[2], false, vNow);
 
   // ---- labels on the wall
   const labCol = outdoor ? '#0b3550' : '#dcf2ff', labHalo = outdoor ? 'rgba(255,255,255,.9)' : 'rgba(6,10,18,.88)';
