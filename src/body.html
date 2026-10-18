@@ -1,0 +1,496 @@
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16.5 9.5"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 4.2l9 15.6H3z"/><path d="M12 10v4.2M12 17.3v.1"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.2M12 7.9v.1"/></symbol>
+    <symbol id="i-replay" viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.4-5.5"/><path d="M4.2 4.2v4.2h4.2"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8.5 6v12M15.5 6v12"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5z"/></symbol>
+    <symbol id="i-inset" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="2"/><rect x="11" y="11" width="7" height="7" rx="1"/></symbol>
+  </defs>
+</svg>
+
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 40 40" aria-hidden="true">
+        <rect x="1" y="1" width="38" height="38" rx="8" fill="var(--panel2)" stroke="var(--line)"/>
+        <rect x="25" y="6" width="3.2" height="25" rx="1" fill="var(--c-screen)"/>
+        <path d="M17 7v24M8.5 7v24" stroke="var(--c-frame)" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M8.5 13h8.5M8.5 21h8.5" stroke="var(--c-frame)" stroke-width="1.6"/>
+        <path d="M17 11h8M17 25h8" stroke="var(--ink2)" stroke-width="1.4"/>
+        <rect x="6" y="31" width="23" height="2.6" rx="1" fill="#e9b422"/>
+        <rect x="6.5" y="27" width="6" height="4" rx=".8" fill="var(--c-ballast)"/>
+        <path d="M28.5 34l2.6-2.6h-5.2z" fill="var(--crit)"/>
+      </svg>
+      <div>
+        <h1>LED Wall Ballast Simulator</h1>
+        <p>Tip-over, bending, straps and stage checks for stacked LED screens, built from an indoor stacking ballast sheet</p>
+      </div>
+    </div>
+    <div class="scn" role="group" aria-label="Example scenarios">
+      <span class="scn-l">Try</span>
+      <button class="chip" type="button" data-scn="sheet">Sheet example</button>
+      <button class="chip" type="button" data-scn="noballast">No ballast</button>
+      <button class="chip" type="button" data-scn="draft">Strong draught</button>
+      <button class="chip" type="button" data-scn="front">Front draught</button>
+      <button class="chip" type="button" data-scn="breeze">Outdoor breeze</button>
+      <button class="chip" type="button" data-scn="gale">Outdoor gale</button>
+      <button class="chip" type="button" data-scn="stage">On a stage</button>
+      <button class="chip" type="button" data-scn="straps">Top straps</button>
+    </div>
+  </header>
+
+  <main class="grid" id="grid">
+    <!-- ================= side view ================= -->
+    <figure class="view" id="viewMain">
+      <div class="view-wrap" id="sideWrap">
+        <canvas id="side" role="img" aria-label="Side view: LED screen, back frame, base plate, ballast, stage, straps and wind arrows, with the tipping pivot"></canvas>
+        <div class="hud tl">
+          <div class="pill" id="pill" data-s="stable" role="status"><svg class="ic"><use href="#i-check"/></svg><span id="pillText">Stable</span></div>
+          <dl class="live" id="live">
+            <div><dt>Wind now</dt><dd id="liveWind">3.3 m/s</dd></div>
+            <div><dt>Force</dt><dd id="liveForce">68 kgf</dd></div>
+            <div><dt>Tilt</dt><dd id="liveTilt">0.00°</dd></div>
+            <div><dt>Top moves</dt><dd id="liveTop">0 mm</dd></div>
+          </dl>
+        </div>
+        <div class="hud tr">
+          <button class="icon-btn" type="button" id="btnReplay" title="Stand the screen up and run the wind again"><svg class="ic"><use href="#i-replay"/></svg><span>Replay</span></button>
+          <button class="icon-btn" type="button" id="btnPause" aria-pressed="false" title="Pause the simulation"><svg class="ic"><use href="#i-pause"/></svg></button>
+          <div class="seg tiny" id="segSpeed" role="radiogroup" aria-label="Simulation speed">
+            <button type="button" role="radio" aria-checked="true" data-v="1">1×</button>
+            <button type="button" role="radio" aria-checked="false" data-v="2">2×</button>
+            <button type="button" role="radio" aria-checked="false" data-v="4">4×</button>
+          </div>
+          <button class="icon-btn" type="button" id="btnInset" aria-pressed="true" title="Show or hide the zoomed base detail"><svg class="ic"><use href="#i-inset"/></svg><span>Base detail</span></button>
+        </div>
+        <div class="hud bl">
+          <div class="legend" aria-hidden="true">
+            <span><i style="background:var(--c-screen)"></i>Screen</span>
+            <span><i style="background:var(--c-frame)"></i>Back frame</span>
+            <span><i style="background:#e9b422"></i>Base plate</span>
+            <span><i style="background:var(--c-ballast)"></i>Ballast</span>
+            <span><i style="background:#d6409f"></i>Wind force</span>
+            <span><i style="background:#ef4444"></i>Tipping pivot</span>
+            <span id="legStrap"><i style="background:#ffb020"></i>Strap</span>
+            <span id="legStage"><i style="background:#8a97a8"></i>Stage</span>
+          </div>
+        </div>
+      </div>
+    </figure>
+
+    <!-- ================= controls ================= -->
+    <aside class="rail" id="rail" aria-label="Controls">
+      <section class="sec">
+        <h2>Environment</h2>
+        <div class="seg big" id="segMode" role="radiogroup" aria-label="Environment">
+          <button type="button" role="radio" aria-checked="true" data-v="indoor">Indoor</button>
+          <button type="button" role="radio" aria-checked="false" data-v="outdoor">Outdoor</button>
+        </div>
+        <p class="hint" id="modeHint"></p>
+      </section>
+
+      <section class="sec">
+        <h2>LED screen <span class="sub" id="screenSub"></span></h2>
+        <div class="ctl">
+          <div class="lab">Cabinet size</div>
+          <div class="seg big" id="segCab" role="radiogroup" aria-label="Cabinet size">
+            <button type="button" role="radio" aria-checked="true" data-v="500x500">500 × 500 mm</button>
+            <button type="button" role="radio" aria-checked="false" data-v="500x1000">500 × 1000 mm</button>
+          </div>
+        </div>
+        <div class="ctl">
+          <label for="cabModel">Cabinet model</label>
+          <select id="cabModel" class="sel"></select>
+          <p class="hint" id="cabNote"></p>
+        </div>
+        <div class="ctl">
+          <label for="W-n">Width</label>
+          <div class="ctl-line"><input type="range" id="W-r" min="1" max="30" step="0.5" aria-label="Width slider"><span class="field"><input type="number" id="W-n" min="1" max="60" step="0.5" inputmode="decimal"><span class="u">m</span></span></div>
+          <p class="hint" id="W-h"></p>
+        </div>
+        <div class="ctl">
+          <label for="H-n">Height</label>
+          <div class="ctl-line"><input type="range" id="H-r" min="1" max="12" step="0.5" aria-label="Height slider"><span class="field"><input type="number" id="H-n" min="0.5" max="20" step="0.5" inputmode="decimal"><span class="u">m</span></span></div>
+          <p class="hint" id="H-h"></p>
+        </div>
+        <div class="ctl">
+          <label for="K-n">Cabinet weight</label>
+          <div class="ctl-line"><input type="range" id="K-r" min="8" max="80" step="0.1" aria-label="Cabinet weight slider"><span class="field"><input type="number" id="K-n" min="1" max="200" step="0.1" inputmode="decimal"><span class="u">kg/m²</span></span></div>
+          <p class="hint" id="K-h"></p>
+        </div>
+      </section>
+
+      <section class="sec">
+        <h2>Bases <span class="sub">back frames</span></h2>
+        <div class="ctl">
+          <label for="N-n">Number of bases <button type="button" class="btn sm" id="btnAutoN" aria-pressed="true" title="One base per metre of width, as in the sheet">Auto</button></label>
+          <div class="ctl-line"><input type="range" id="N-r" min="1" max="28" step="1" aria-label="Number of bases slider"><span class="field"><input type="number" id="N-n" min="1" max="60" step="1" inputmode="numeric"><span class="u">×</span></span></div>
+          <p class="hint" id="N-h"></p>
+        </div>
+      </section>
+
+      <section class="sec">
+        <h2>Ballast <span class="sub">at the rear of each base</span></h2>
+        <div class="seg big" id="segBal" role="radiogroup" aria-label="Ballast mode">
+          <button type="button" role="radio" aria-checked="true" data-v="auto">Auto (sheet result)</button>
+          <button type="button" role="radio" aria-checked="false" data-v="manual">Manual</button>
+        </div>
+        <div class="ctl" style="margin-top:12px">
+          <label for="B-n">Weight per base</label>
+          <div class="ctl-line"><input type="range" id="B-r" min="0" max="1000" step="1" aria-label="Ballast per base slider"><span class="field"><input type="number" id="B-n" min="0" max="5000" step="0.5" inputmode="decimal"><span class="u">kg</span></span></div>
+          <p class="hint" id="B-h"></p>
+        </div>
+        <div class="ctl">
+          <div class="lab">Position on the base <small id="posNote"></small></div>
+          <div class="seg" id="segPos" role="radiogroup" aria-label="Ballast position">
+            <button type="button" role="radio" aria-checked="true" data-v="auto" title="As in the sheet: rear end for rear wind, middle for front wind">Auto</button>
+            <button type="button" role="radio" aria-checked="false" data-v="rear">Rear end</button>
+            <button type="button" role="radio" aria-checked="false" data-v="mid">Middle</button>
+          </div>
+        </div>
+        <div class="sel-box" id="selBox" hidden>
+          <div class="t"><span id="selName">Base 1</span><button type="button" class="btn sm" id="selClear">Deselect</button></div>
+          <div class="stepper">
+            <button type="button" class="btn" id="selMinus" aria-label="Remove ballast from this base">−</button>
+            <span class="field"><input type="number" id="selVal" min="0" max="5000" step="0.5" inputmode="decimal" aria-label="Ballast on the selected base"><span class="u">kg</span></span>
+            <button type="button" class="btn" id="selPlus" aria-label="Add ballast to this base">+</button>
+          </div>
+          <div class="row" style="margin-top:8px"><button type="button" class="btn sm" id="selAll">Copy to all bases</button><span class="hint" style="margin:0">Click a base in the rear view to edit it.</span></div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <h2>Stage <span class="sub" id="stageSub"></span></h2>
+        <div class="seg big" id="segStage" role="radiogroup" aria-label="Stage">
+          <button type="button" role="radio" aria-checked="true" data-v="off">No stage</button>
+          <button type="button" role="radio" aria-checked="false" data-v="on">On a stage</button>
+        </div>
+        <div id="stageBox" hidden style="margin-top:12px">
+          <div class="ctl">
+            <label for="STH-n">Stage height</label>
+            <div class="ctl-line"><input type="range" id="STH-r" min="0.2" max="2.5" step="0.05" aria-label="Stage height slider"><span class="field"><input type="number" id="STH-n" min="0.1" max="4" step="0.05" inputmode="decimal"><span class="u">m</span></span></div>
+            <div class="dirbtns" style="margin-top:8px">
+              <button type="button" class="btn sm" data-sth="0.4">0.4</button>
+              <button type="button" class="btn sm" data-sth="0.8">0.8</button>
+              <button type="button" class="btn sm" data-sth="1.2">1.2</button>
+              <button type="button" class="btn sm" data-sth="1.6">1.6</button>
+              <button type="button" class="btn sm" data-sth="2">2.0</button>
+            </div>
+            <p class="hint" id="STH-h"></p>
+          </div>
+          <div class="ctl">
+            <label for="STD-n">Stage depth</label>
+            <div class="ctl-line"><input type="range" id="STD-r" min="2" max="12" step="0.5" aria-label="Stage depth slider"><span class="field"><input type="number" id="STD-n" min="1" max="20" step="0.5" inputmode="decimal"><span class="u">m</span></span></div>
+            <p class="hint" id="STD-h"></p>
+          </div>
+          <div class="ctl">
+            <label for="STF-n">Screen from the front edge</label>
+            <div class="ctl-line"><input type="range" id="STF-r" min="0.3" max="10" step="0.1" aria-label="Distance of the screen from the stage front edge slider"><span class="field"><input type="number" id="STF-n" min="0" max="20" step="0.1" inputmode="decimal"><span class="u">m</span></span></div>
+            <p class="hint" id="STF-h"></p>
+          </div>
+          <div class="ctl">
+            <label for="STW-n">Deck and legs weigh</label>
+            <div class="ctl-line"><input type="range" id="STW-r" min="10" max="120" step="1" aria-label="Stage weight slider"><span class="field"><input type="number" id="STW-n" min="1" max="400" step="1" inputmode="decimal"><span class="u">kg/m²</span></span></div>
+            <p class="hint" id="STW-h"></p>
+          </div>
+          <div class="ctl">
+            <label for="STR-n">Deck is rated for</label>
+            <div class="ctl-line"><input type="range" id="STR-r" min="200" max="1500" step="10" aria-label="Deck rating slider"><span class="field"><input type="number" id="STR-n" min="50" max="3000" step="10" inputmode="decimal"><span class="u">kg/m²</span></span></div>
+            <p class="hint">Steeldeck is rated 7.5 kN/m², about 750 kg/m². A Stageline SL100 floor is 500 kg/m².</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <h2>Back straps <span class="sub" id="restSub"></span></h2>
+        <div class="seg" id="segRest" role="radiogroup" aria-label="Back restraint type">
+          <button type="button" role="radio" aria-checked="true" data-v="none">None</button>
+          <button type="button" role="radio" aria-checked="false" data-v="strap" title="Ratchet strap">Strap</button>
+          <button type="button" role="radio" aria-checked="false" data-v="cable" title="Steel cable with turnbuckle">Cable</button>
+          <button type="button" role="radio" aria-checked="false" data-v="truss" title="Rigid rear truss">Truss</button>
+        </div>
+        <p class="hint" id="restHint"></p>
+        <div id="restBox" hidden style="margin-top:12px">
+          <div class="ctl">
+            <label for="RN-n">How many across the width</label>
+            <div class="ctl-line"><input type="range" id="RN-r" min="1" max="28" step="1" aria-label="Number of straps slider"><span class="field"><input type="number" id="RN-n" min="1" max="60" step="1" inputmode="numeric"><span class="u">×</span></span></div>
+          </div>
+          <div class="ctl">
+            <label for="RA-n">Attach height <button type="button" class="btn sm" id="btnRATop">Top</button></label>
+            <div class="ctl-line"><input type="range" id="RA-r" min="0.5" max="12" step="0.1" aria-label="Attach height slider"><span class="field"><input type="number" id="RA-n" min="0.3" max="20" step="0.1" inputmode="decimal"><span class="u">m</span></span></div>
+          </div>
+          <div class="ctl">
+            <label for="RD-n">Anchor distance behind <button type="button" class="btn sm" id="btnRD45">45°</button></label>
+            <div class="ctl-line"><input type="range" id="RD-r" min="0.5" max="14" step="0.1" aria-label="Anchor distance slider"><span class="field"><input type="number" id="RD-n" min="0.5" max="30" step="0.1" inputmode="decimal"><span class="u">m</span></span></div>
+            <p class="hint" id="RD-h"></p>
+          </div>
+          <div class="ctl" id="ctlTo">
+            <div class="lab">Anchored to</div>
+            <div class="seg" id="segRTo" role="radiogroup" aria-label="Anchor point">
+              <button type="button" role="radio" aria-checked="true" data-v="floor">Floor behind the stage</button>
+              <button type="button" role="radio" aria-checked="false" data-v="deck">Stage deck</button>
+            </div>
+          </div>
+          <div class="ctl" id="ctlSide">
+            <div class="lab">Pulls against wind from</div>
+            <div class="seg" id="segRSide" role="radiogroup" aria-label="Which side the straps work on">
+              <button type="button" role="radio" aria-checked="true" data-v="rear">Rear</button>
+              <button type="button" role="radio" aria-checked="false" data-v="front">Front</button>
+              <button type="button" role="radio" aria-checked="false" data-v="both">Both</button>
+            </div>
+          </div>
+          <div class="ctl">
+            <label for="RW-n">Rated load each <small id="RW-v"></small></label>
+            <div class="ctl-line"><input type="range" id="RW-r" min="200" max="10000" step="100" aria-label="Rated load slider"><span class="field"><input type="number" id="RW-n" min="50" max="50000" step="100" inputmode="decimal"><span class="u">kg</span></span></div>
+            <p class="hint" id="RW-h"></p>
+          </div>
+          <div class="ctl">
+            <label for="RK-n">Anchor weight each <small>0 = fixed anchor</small></label>
+            <div class="ctl-line"><input type="range" id="RK-r" min="0" max="1000" step="10" aria-label="Anchor weight slider"><span class="field"><input type="number" id="RK-n" min="0" max="10000" step="10" inputmode="decimal"><span class="u">kg</span></span></div>
+            <p class="hint" id="RK-h"></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <h2>Wind</h2>
+        <div id="windIndoor">
+          <div class="ctl">
+            <label for="SC-r">Wind scale <small id="SC-v"></small></label>
+            <div class="ctl-line" style="grid-template-columns:1fr"><input type="range" id="SC-r" min="0" max="10" step="1"></div>
+            <p class="hint" id="SC-h"></p>
+          </div>
+        </div>
+        <div id="windOutdoor" hidden>
+          <div class="ctl">
+            <label for="V-n">Wind speed <small id="V-v"></small></label>
+            <div class="ctl-line"><input type="range" id="V-r" min="0" max="40" step="0.5" aria-label="Wind speed slider"><span class="field"><input type="number" id="V-n" min="0" max="60" step="0.5" inputmode="decimal"><span class="u">m/s</span></span></div>
+            <p class="hint" id="V-h"></p>
+          </div>
+          <div class="ctl">
+            <label for="GU-n">Gusts <small>extra speed at the peaks</small></label>
+            <div class="ctl-line"><input type="range" id="GU-r" min="0" max="80" step="5" aria-label="Gust strength slider"><span class="field"><input type="number" id="GU-n" min="0" max="100" step="5" inputmode="numeric"><span class="u">%</span></span></div>
+            <p class="hint" id="GU-h"></p>
+          </div>
+          <div class="ctl">
+            <div class="lab">Wind gets stronger with height</div>
+            <div class="seg" id="segProf" role="radiogroup" aria-label="Wind gradient">
+              <button type="button" role="radio" aria-checked="true" data-v="uniform" title="Same pressure over the whole screen, as in the sheet">Same</button>
+              <button type="button" role="radio" aria-checked="false" data-v="open">Open</button>
+              <button type="button" role="radio" aria-checked="false" data-v="suburban">Suburb</button>
+              <button type="button" role="radio" aria-checked="false" data-v="urban">City</button>
+            </div>
+            <p class="hint" id="PROF-h"></p>
+          </div>
+          <div class="ctl">
+            <label for="FA-n">Screen faces <small id="FA-v"></small></label>
+            <div class="ctl-line"><input type="range" id="FA-r" min="0" max="359" step="1" aria-label="Screen facing direction slider"><span class="field"><input type="number" id="FA-n" min="0" max="359" step="1" inputmode="numeric"><span class="u">°</span></span></div>
+          </div>
+        </div>
+        <div class="ctl">
+          <label for="DIR-n">Direction <small id="DIR-v"></small></label>
+          <div class="ctl-line"><input type="range" id="DIR-r" min="0" max="359" step="1" aria-label="Wind direction slider"><span class="field"><input type="number" id="DIR-n" min="0" max="359" step="1" inputmode="numeric"><span class="u">°</span></span></div>
+          <div class="dirbtns" style="margin-top:8px">
+            <button type="button" class="btn sm" data-dir="0">From rear</button>
+            <button type="button" class="btn sm" data-dir="180">From front</button>
+            <button type="button" class="btn sm" data-dir="45">Rear 45°</button>
+            <button type="button" class="btn sm" data-dir="90">Side</button>
+          </div>
+          <p class="hint" id="DIR-h"></p>
+        </div>
+      </section>
+
+      <section class="sec">
+        <h2>Safety</h2>
+        <div class="ctl">
+          <label for="SF-n">Required safety factor <small>sheet: 1.2 to 1.5</small></label>
+          <div class="ctl-line"><input type="range" id="SF-r" min="1" max="2.5" step="0.05" aria-label="Safety factor slider"><span class="field"><input type="number" id="SF-n" min="1" max="3" step="0.05" inputmode="decimal"><span class="u">×</span></span></div>
+        </div>
+      </section>
+
+      <details class="sec" id="adv">
+        <summary>Advanced</summary>
+        <div class="ctl">
+          <label for="EI-n">Frame stiffness EI <small>per base, MN·m²</small></label>
+          <div class="ctl-line"><input type="range" id="EI-r" min="0" max="1000" step="1" aria-label="Frame stiffness slider"><span class="field"><input type="number" id="EI-n" min="0.05" max="200" step="0.1" inputmode="decimal"><span class="u">MN·m²</span></span></div>
+          <p class="hint" id="EI-h"></p>
+        </div>
+        <div class="ctl">
+          <label for="DL-n">Comfortable top movement <small>height ÷ this</small></label>
+          <div class="ctl-line"><input type="range" id="DL-r" min="50" max="400" step="10" aria-label="Deflection limit slider"><span class="field"><input type="number" id="DL-n" min="20" max="1000" step="10" inputmode="numeric"><span class="u">H/</span></span></div>
+        </div>
+        <div class="ctl">
+          <label for="CF-n">Wind shape factor <small>sheet: 1.0</small></label>
+          <div class="ctl-line"><input type="range" id="CF-r" min="0.5" max="2" step="0.05" aria-label="Shape factor slider"><span class="field"><input type="number" id="CF-n" min="0.1" max="3" step="0.05" inputmode="decimal"><span class="u">Cf</span></span></div>
+        </div>
+        <div class="ctl">
+          <label for="DP-n">Base depth <small>sheet: 0.922 m</small></label>
+          <div class="ctl-line"><input type="range" id="DP-r" min="0.5" max="3" step="0.01" aria-label="Base depth slider"><span class="field"><input type="number" id="DP-n" min="0.3" max="5" step="0.01" inputmode="decimal"><span class="u">m</span></span></div>
+          <p class="hint" id="DP-h"></p>
+        </div>
+        <div class="ctl">
+          <label for="MU-n">Floor friction <small>sheet: assumed big enough</small></label>
+          <div class="ctl-line"><input type="range" id="MU-r" min="0.1" max="1" step="0.05" aria-label="Friction slider"><span class="field"><input type="number" id="MU-n" min="0.05" max="1.5" step="0.05" inputmode="decimal"><span class="u">µ</span></span></div>
+        </div>
+        <div class="ctl">
+          <label for="STM-n">Friction wall on deck <small>used on a stage</small></label>
+          <div class="ctl-line"><input type="range" id="STM-r" min="0.1" max="1" step="0.05" aria-label="Wall on deck friction slider"><span class="field"><input type="number" id="STM-n" min="0.05" max="1.5" step="0.05" inputmode="decimal"><span class="u">µ</span></span></div>
+        </div>
+        <div class="ctl">
+          <div class="lab">Back frame weight <small>sheet constants</small></div>
+          <div class="row" style="gap:10px">
+            <label class="switch" for="FR-row"><span class="field"><input type="number" id="FR-row" step="0.05" min="0"><span class="u">kg</span></span> per metre of height, per base</label>
+            <label class="switch" for="FR-base"><span class="field"><input type="number" id="FR-base" step="0.05" min="0"><span class="u">kg</span></span> per base</label>
+            <label class="switch" for="FR-w"><span class="field"><input type="number" id="FR-w" step="0.1" min="0"><span class="u">kg</span></span> per m of width</label>
+          </div>
+          <p class="hint">The sheet counts 4 kg per 1 m row. Here it is per metre of height, so 500 mm cabinets do not double the frame.</p>
+        </div>
+        <button type="button" class="btn" id="btnReset">Reset to the sheet example</button>
+      </details>
+    </aside>
+
+    <!-- ================= front view + rear view + plan ================= -->
+    <div class="rest" id="rest">
+      <figure class="fig wide">
+        <figcaption>Front view <span class="sub" id="frontSub">how the LED face moves in the wind</span></figcaption>
+        <div class="frontwrap">
+          <canvas id="front" role="img" aria-label="Front view of the LED wall on its stage, drawn in perspective, bending in the wind"></canvas>
+          <div class="hud tl2"><dl class="live" id="frontLive"><div><dt>Top moves</dt><dd id="fTop">0 mm</dd></div><div><dt>Ratio</dt><dd id="fRatio">–</dd></div><div><dt>Strap</dt><dd id="fStrap">–</dd></div><div><dt>Seams</dt><dd id="fSeam">–</dd></div></dl></div>
+          <div class="hud tr2">
+            <div class="seg tiny" id="segCam" role="radiogroup" aria-label="Camera">
+              <button type="button" role="radio" aria-checked="false" data-v="front">Front</button>
+              <button type="button" role="radio" aria-checked="true" data-v="three">¾ view</button>
+              <button type="button" role="radio" aria-checked="false" data-v="side">Side on</button>
+            </div>
+            <div class="seg tiny" id="segExag" role="radiogroup" aria-label="Bending scale">
+              <button type="button" role="radio" aria-checked="true" data-v="auto" title="Make small bending visible">Exaggerated</button>
+              <button type="button" role="radio" aria-checked="false" data-v="true" title="Real proportions">True scale</button>
+            </div>
+          </div>
+          <div class="hud bl2"><div class="legend" id="frontLegend" aria-hidden="true"></div></div>
+        </div>
+      </figure>
+      <figure class="fig">
+        <figcaption>Rear view <span class="sub" id="rearSub">seen from behind · click a base</span></figcaption>
+        <canvas id="rear" role="img" aria-label="Rear view of the LED wall with its bases, and a bar chart of ballast per base"></canvas>
+        <div class="foot" id="rearKeys">
+          <span><i style="background:var(--c-ballast)"></i>Ballast per base</span>
+          <span><i style="background:var(--warn)"></i>Below required safety factor</span>
+          <span><i style="background:var(--crit)"></i>Would lift</span>
+        </div>
+        <details class="tv"><summary>Table view</summary>
+          <div class="tablewrap"><table class="data"><thead><tr><th>Base</th><th>Ballast (kg)</th><th>Safety factor</th><th>Status</th></tr></thead><tbody id="baseRows"></tbody></table></div>
+        </details>
+      </figure>
+      <figure class="fig">
+        <figcaption>Wind direction <span class="sub">drag the arrow</span></figcaption>
+        <canvas id="plan" role="img" aria-label="Plan view of the wall, its stage and straps, with a wind direction dial"></canvas>
+        <div class="foot"><span id="planInfo"></span></div>
+      </figure>
+    </div>
+
+    <!-- ================= results ================= -->
+    <aside class="results" id="results" aria-label="Results">
+      <section class="sec verdict" id="verdict" data-s="stable">
+        <div class="vh"><svg class="ic" id="vIcon"><use href="#i-check"/></svg><span class="vl" id="vLabel">Stable</span></div>
+        <div class="hero"><span class="n" id="vSF">1.50</span><span class="of">safety factor<br>needs <b id="vReq">1.50</b> or more</span></div>
+        <div class="meter" id="meter" role="meter" aria-label="Safety factor" aria-valuemin="0" aria-valuemax="3" aria-valuenow="1.5">
+          <div class="meter-fill" id="meterFill"></div>
+          <div class="tk up" id="tkTip" style="left:33.3%"><span>tips at 1.0</span></div>
+          <div class="tk dn" id="tkReq" style="left:50%"><span>needs 1.50</span></div>
+        </div>
+        <p class="vtext" id="vText" aria-live="polite"></p>
+      </section>
+
+      <section class="sec">
+        <h2>Ballast and wind limits</h2>
+        <div class="tiles">
+          <div class="tile"><div class="k">Needed per base</div><div class="v" id="tNeedPer">9.06<small>kg</small></div><div class="s" id="tNeedTot"></div></div>
+          <div class="tile"><div class="k">You have per base</div><div class="v" id="tYourPer">9.06<small>kg</small></div><div class="s" id="tYourTot"></div></div>
+          <div class="tile"><div class="k" id="tAllowK">Holds, with margin, up to</div><div class="v" id="tAllow">3.3<small>m/s</small></div><div class="s" id="tAllowS"></div></div>
+          <div class="tile"><div class="k" id="tTipK">Tips over at</div><div class="v" id="tTip">4.0<small>m/s</small></div><div class="s" id="tTipS"></div></div>
+        </div>
+      </section>
+
+      <section class="sec" id="bendSec">
+        <h2>How it bends <span class="sub">illustrative stiffness</span></h2>
+        <div class="tiles">
+          <div class="tile"><div class="k">Top moves</div><div class="v" id="bTop">0<small>mm</small></div><div class="s" id="bTopS"></div></div>
+          <div class="tile"><div class="k">Seam opens at the base</div><div class="v" id="bSeam">0<small>mm</small></div><div class="s" id="bSeamS"></div></div>
+          <div class="tile" id="bStrapTile"><div class="k">Strap pull each</div><div class="v" id="bStrap">0<small>kN</small></div><div class="s" id="bStrapS"></div></div>
+          <div class="tile"><div class="k">Base lifts at the rear</div><div class="v" id="bLift">0<small>mm</small></div><div class="s" id="bLiftS"></div></div>
+        </div>
+        <canvas id="bendC" role="img" aria-label="Deflection and bending moment along the height of the wall" style="width:100%;height:210px;display:block;margin-top:12px"></canvas>
+        <div class="keys" id="bendKeys">
+          <span><span class="ln" style="color:var(--c-screen)"></span>Sideways movement</span>
+          <span><span class="ln" style="color:var(--c-ballast)"></span>Bending moment</span>
+          <span id="bendStrapKey"><i style="background:#ffb020"></i>Strap attach point</span>
+        </div>
+        <p class="hint" id="bendNote"></p>
+      </section>
+
+      <section class="sec">
+        <h2>Moment balance <span class="sub">about the tipping toe, kg·m</span></h2>
+        <div class="mom-row"><span class="k">Wind × safety factor</span><span></span><span class="v" id="mWind">0</span></div>
+        <div class="mom" id="momWind"></div>
+        <div class="mom-row"><span class="k">Resisting</span><span></span><span class="v" id="mRest">0</span></div>
+        <div class="mom" id="momRest"></div>
+        <div class="keys" id="momKeys">
+          <span><i style="background:var(--c-screen)"></i>Screen <b class="mono" id="kScreen"></b></span>
+          <span><i style="background:var(--c-ballast)"></i>Ballast <b class="mono" id="kBallast"></b></span>
+          <span><i style="background:var(--c-frame)"></i>Frame <b class="mono" id="kFrame"></b></span>
+          <span id="kStageWrap"><i style="background:#8a97a8"></i>Stage <b class="mono" id="kStage"></b></span>
+          <span id="kStrapWrap"><i style="background:#ffb020"></i>Straps <b class="mono" id="kStrap"></b></span>
+        </div>
+        <p class="eq" id="eq"></p>
+      </section>
+
+      <section class="sec">
+        <h2>Stability map <span class="sub">ballast per base against wind</span></h2>
+        <div class="mapwrap" id="mapWrap">
+          <canvas id="map" role="img" aria-label="Chart of required ballast per base against wind speed, with your setup marked"></canvas>
+          <div class="tip" id="mapTip" hidden></div>
+        </div>
+        <div class="keys" id="mapKeys">
+          <span><span class="ln" style="color:var(--good)"></span>Needed for the required safety factor</span>
+          <span><span class="ln" style="color:var(--crit)"></span>Tips over</span>
+          <span><b class="mono" style="color:var(--ink)">●</b> Your setup</span>
+        </div>
+        <details class="tv" style="margin:10px -16px -14px"><summary>Table view</summary>
+          <div class="tablewrap"><table class="data"><thead><tr><th>Wind (m/s)</th><th>Scale</th><th>Needed (kg/base)</th><th>Tips below (kg/base)</th></tr></thead><tbody id="mapRows"></tbody></table></div>
+        </details>
+      </section>
+    </aside>
+
+    <!-- ================= checks + sheet ================= -->
+    <div class="more" id="more">
+      <section class="panel sec">
+        <h2>Checks</h2>
+        <ul class="checks" id="checks"></ul>
+      </section>
+
+      <details class="panel sec" id="sheetBox">
+        <summary>The sheet, cell by cell</summary>
+        <table class="sheet" id="sheetTable"></table>
+        <p class="hint">Same formulas as Sheet1, filled in with the current inputs. Outdoors, on a stage, with straps or for angled wind, the numbers use the peak wind pressure and the governing check.</p>
+      </details>
+    </div>
+  </main>
+
+  <p class="foot-note">
+    <b>How it works.</b> The wind pushes on the whole screen at half its height plus 0.1 m. The screen, the back frame and the ballast try to hold it down about the toe of the base.
+    Following the sheet: <code>wind force × arm × safety factor = screen + frame + ballast moments</code>.
+    With wind from the rear the toe is under the screen (screen arm 0, frame arm 0.46 m, ballast arm 0.862 m). With wind from the front the toe is at the rear of the base (screen arm 0.922 m, frame and ballast 0.46 m).
+    Wind pressure is ½·1.25·v² (the sheet's table). Angled wind counts by cos θ. Outdoors, gusts raise the design wind to the peak speed, and the animation replays them.
+    <b>Straps and stage.</b> A strap, cable or truss is a spring from the screen to an anchor. The wall is also a cantilever that bends, so the strap only pulls as hard as the wall moves it, plus the lift of the base. The program finds the largest wind the wall can take before a strap reaches its rated load or the wall passes its tipping point.
+    On a stage it checks two ways of failing and shows the worse: the wall tipping on the deck, and the stage and wall tipping together about the stage edge.
+    <b>Assumptions.</b> Straps are hand-tight with no slack: a loose strap lets the wall start to fall before it pulls and then takes a shock load, so keep them tight. Bending stiffness is illustrative (about two 50×50×3 aluminium posts 0.38 m apart per base), set it to your frame in Advanced. Ratchet straps stretch up to 7% at rated load (EN 12195-2), steel cable 0.4%, a truss 0.03%.
+    Steeldeck stage decks are rated about 7.5 kN/m². Frame strength, cabinet locks, anchors and ground are not checked. Sliding is an extra check; the sheet assumes enough friction.
+    Scale 1 in the sheet's table lists 0.14 N/m² for 1.5 m/s, which should be 1.4, so 1.4 is used here.
+    Cabinet weights come from Unilumin datasheets (Uslim4 13 kg, Uslim2 7.8 kg, USlim-O3 14.8 kg, USlim-O4 32 to 34 kg) and a distributor listing (UGC 5.6 kg).
+    <b>This is a rough reference.</b> As the sheet itself says, it cannot replace a structural simulation or a practical test. Use it to see how a wall reacts and to size a first guess, and have a qualified rigger or engineer approve any real installation.
+  </p>
+</div>
