@@ -390,3 +390,62 @@ function drawBend(canvas, st) {
     txt(ctx, 'strap', pd.x0 + pw - 12, ya - 7, { font: '600 10.5px ' + F.sans, align: 'right', color: T.ink2, halo: T.panel, haloW: 3 });
   }
 }
+
+/* ---------------- cabinet locks: the wall seen from the front, each cabinet coloured by how hard its fixings and locks are worked ---------------- */
+const LK_STOPS = [[0, [47, 182, 122]], [0.5, [231, 178, 26]], [0.8, [238, 122, 43]], [1, [208, 59, 59]]];      // against the strength you typed
+function lockColor(u, mode) {
+  u = Math.max(0, u);
+  if (mode === 'relative') return u < 0.5 ? mixRGB([23, 50, 79], [47, 120, 184], u * 2) : mixRGB([47, 120, 184], [143, 208, 255], Math.min(1, (u - 0.5) * 2));
+  for (let k = 1; k < LK_STOPS.length; k++) if (u <= LK_STOPS[k][0]) { const a = LK_STOPS[k - 1], b = LK_STOPS[k]; return mixRGB(a[1], b[1], (u - a[0]) / (b[0] - a[0])); }
+  return mixRGB(LK_STOPS[3][1], LK_STOPS[3][1], 1);
+}
+/* which cabinets have come off, and which have lost a lock but hang on: live from the simulation while it runs, else from the failure order up to a load factor */
+function lockState(st, lamShow) {
+  const L = st.Dlk, n = L.n, lost = new Uint8Array(n), hit = new Uint8Array(n), order = new Int16Array(n).fill(-1);
+  const live = st.ui.run !== 'idle' && st.sim.lk && st.sim.lkLost && st.sim.lk.n === n;
+  if (live) { lost.set(st.sim.lkLost); hit.set(st.sim.lkHit); }
+  L.events.forEach((e, k) => {
+    if (live ? k >= st.sim.lkI : e.lam > lamShow * (1 + 1e-9)) return;
+    if (!live) { for (const i of e.hit) hit[i] = 1; for (const i of e.lost) lost[i] = 1; }
+  });
+  L.groups.forEach((g, k) => { if (k < 9 && (live ? g.first < st.sim.lkI : g.lam <= lamShow * (1 + 1e-9))) for (const i of g.hit.slice(0, 40)) if (order[i] < 0) order[i] = k; });   // the steps, numbered once they have happened
+  return { lost, hit, order, live };
+}
+function drawLockMap(canvas, st, hit) {
+  const { ctx, w, h } = fitCanvas(canvas), L = st.Dlk;
+  ctx.fillStyle = BP.bg; ctx.fillRect(0, 0, w, h);
+  if (!L) return;
+  const { cols, rows, cabH } = L, padL = 10, padR = 10, padT = 26, padB = 10;
+  const sc = Math.min((w - padL - padR) / (cols * M.CAB.w), (h - padT - padB) / (rows * cabH));
+  const cw = M.CAB.w * sc, ch = cabH * sc, x0 = (w - cw * cols) / 2, y0 = padT + (h - padT - padB - ch * rows) / 2;
+  hit.lock = { x0, y0, cw, ch, cols, rows };
+  const lamShow = st.ui.lkLam === 'sf' ? st.S.SF : 1, ls = lockState(st, lamShow), strength = L.useKind === 'strength';
+  const gap = cw >= 9 ? 1 : 0;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c, x = x0 + c * cw, y = y0 + (rows - 1 - r) * ch;
+      if (ls.lost[i]) {                                       // came off: an empty place in the wall
+        ctx.fillStyle = '#080d14'; ctx.fillRect(x + gap, y + gap, cw - gap, ch - gap);
+        if (cw >= 10) { ctx.strokeStyle = 'rgba(208,59,59,.75)'; ctx.lineWidth = 1.4; line(ctx, x + cw * 0.28, y + ch * 0.28, x + cw * 0.72, y + ch * 0.72); line(ctx, x + cw * 0.72, y + ch * 0.28, x + cw * 0.28, y + ch * 0.72); }
+        continue;
+      }
+      ctx.fillStyle = lockColor(strength ? L.use[i] : Math.min(1, L.use[i]), strength ? 'strength' : 'relative'); ctx.fillRect(x + gap, y + gap, cw - gap, ch - gap);
+      if (ls.hit[i]) { ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.4, Math.min(2.4, cw * 0.1)); ctx.strokeRect(x + gap + 1, y + gap + 1, cw - gap - 2, ch - gap - 2); }
+    }
+  }
+  if (cw >= 15 && ch >= 15) {                                 // the order in which they let go
+    for (let i = 0; i < L.n; i++) {
+      const k = ls.order[i]; if (k < 0) continue;
+      const r = Math.floor(i / cols), c = i - r * cols;
+      txt(ctx, String(k + 1), x0 + (c + 0.5) * cw, y0 + (rows - 1 - r + 0.5) * ch + 4, { font: '700 ' + Math.min(13, Math.max(10, cw * 0.55)) + 'px ' + F.mono, align: 'center', color: '#fff', halo: 'rgba(8,13,20,.85)', haloW: 3 });
+    }
+  }
+  const hv = hit.lockHover;
+  if (hv != null && hv >= 0 && hv < L.n) {
+    const r = Math.floor(hv / cols), c = hv - r * cols;
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(x0 + c * cw + 1, y0 + (rows - 1 - r) * ch + 1, cw - 2, ch - 2);
+  }
+  ctx.strokeStyle = BP.edge; ctx.lineWidth = 1; ctx.strokeRect(x0 - 0.5, y0 - 0.5, cw * cols + 1, ch * rows + 1);
+  txt(ctx, 'top', x0, y0 - 8, { font: '500 10.5px ' + F.mono, color: BP.text });
+  if (ls.live) txt(ctx, w < 440 ? 'live' : 'live: what has come off so far', x0 + 40, y0 - 8, { font: '600 10.5px ' + F.mono, color: '#ffd24a' });
+}

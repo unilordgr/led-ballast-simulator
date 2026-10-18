@@ -2,12 +2,12 @@
 const $ = (id) => document.getElementById(id);
 const S = M.defaults();
 const sim = new M.Sim();
-const ui = { selected: -1, speed: 1, paused: false, run: 'idle', result: null, tab: 'wall', rtab: 'summary', showInset: true, dragTop: 0, exag: 'auto', cam: 'three', camAz: CAM_PRESETS.three.az, camEl: CAM_PRESETS.three.el, camTAz: CAM_PRESETS.three.az, camTEl: CAM_PRESETS.three.el };
+const ui = { selected: -1, speed: 1, paused: false, run: 'idle', result: null, tab: 'wall', rtab: 'summary', lkLam: '1', showInset: true, dragTop: 0, exag: 'auto', cam: 'three', camAz: CAM_PRESETS.three.az, camEl: CAM_PRESETS.three.el, camTAz: CAM_PRESETS.three.az, camTEl: CAM_PRESETS.three.el };
 const hits = { rear: null, plan: null, map: null, hoverV: null };
 const st = { S, sim, ui, D: null, V: null, t: 0 };
 const SUB = 1 / 240;
-let D = null, sig = '';
-let dirty = { rear: true, map: true, bend: true };
+let D = null, Dlk = null, sig = '', lkKey = '';
+let dirty = { rear: true, map: true, bend: true, lock: true };
 
 const BAL_MAX = () => (S.mode === 'indoor' ? (S.indoorCase === 'quake' ? 1500 : S.indoorCase === 'door' ? 300 : 200) : 1500);
 const roundBallast = (kg) => (kg < 20 ? Math.round(kg * 10) / 10 : kg < 200 ? Math.round(kg * 2) / 2 : Math.round(kg));
@@ -51,6 +51,9 @@ function normalize() {
   const R = S.rest, cols = Math.max(1, Math.round(S.W / M.CAB.w));
   R.n = clamp(Math.round(R.n || 0), 0, 60); R.a = Math.max(0, R.a || 0); R.d = Math.max(0, R.d || 0);
   R.wll = clamp(R.wll, 50, 50000); R.slack = clamp(R.slack, 0, 2000); R.anchorKg = clamp(R.anchorKg, 0, 10000);
+  const lk = S.locks;
+  lk.on = !!lk.on; lk.fixKgf = clamp(+lk.fixKgf || 0, 0, 20000); lk.lockKgf = clamp(+lk.lockKgf || 0, 0, 20000);
+  lk.fixN = clamp(Math.round(lk.fixN) || 1, 1, 16); lk.lockN = clamp(Math.round(lk.lockN) || 0, 0, 16); lk.edge = clamp(+lk.edge || 1, 1, 4); lk.stiff = clamp(+lk.stiff || 1, 0.1, 10);
   if (S.autoN) S.N = M.sheetBases(S);
   S.N = clamp(Math.round(S.N), 1, cols);
   if (!S.ballastAuto && (!S.ballast || S.ballast.length !== S.N)) {
@@ -63,14 +66,15 @@ function physSig() {
   const sp = r.strap ? [r.strap.c0.toFixed(1), r.strap.dp1.toExponential(4), r.strap.gp, r.strap.PhCap.toFixed(0), r.strap.aPiv.toFixed(3), r.strap.xiAtt.toFixed(3)].join(',') : '-';
   const bs = r.bendStrap ? [r.bendStrap.c0.toFixed(1), r.bendStrap.dp1.toExponential(4)].join(',') : '-';
   const ld = S.mode === 'indoor' ? [D.loadCase, S.door.v, S.door.dur, S.knock.kgf, S.knock.h, S.knock.from, S.knock.dur, S.knock.share, S.sway.amp, S.sway.f, S.sway.bounce, S.quake.pga, S.quake.floor, S.quake.dur, S.notional.pct].join(',') : '';
-  return [f(r.m), f(r.x), f(r.y), r.FN === undefined ? r.F.toFixed(2) : r.FN, r.hc.toFixed(4), D.dir, S.mode === 'outdoor' ? S.gust : 0, D.wind.cn.toFixed(4), sp, bs, r.gov, ld].join('|');
+  return [f(r.m), f(r.x), f(r.y), r.FN === undefined ? r.F.toFixed(2) : r.FN, r.hc.toFixed(4), D.dir, S.mode === 'outdoor' ? S.gust : 0, D.wind.cn.toFixed(4), sp, bs, r.gov, ld, Dlk ? Dlk.sig : ''].join('|');
 }
 function update() {
   normalize();
   D = M.derive(S);
   st.D = D;
+  Dlk = M.locksFor(S, D); st.Dlk = Dlk; dirty.lock = true;
   const s2 = physSig();
-  sim.setRig(D, S);
+  sim.setRig(D, S); sim.setLocks(Dlk);
   if (s2 !== sig) {                                    // the wall or the load changed: the run starts over and the last result is forgotten
     sig = s2; sim.reset(); ui.result = null;
     if (ui.run === 'finished') ui.run = 'idle';
@@ -157,7 +161,7 @@ function newWall() {                               // a fresh wall; the last one
   toast('New wall: everything is back to the starting values.', true);
 }
 const EXAMPLE_NAMES = { sheet: 'Sheet wall', noballast: 'No ballast', draft: 'Strong draught', front: 'Front draught', door: 'Door gust', knock: 'Knock', wobble: 'Stage wobble', quake: 'Earthquake',
-  breeze: 'Outdoor breeze', gale: 'Outdoor gale', stage: 'On a stage', straps: 'Top straps' };
+  weaklock: 'Weak locks', breeze: 'Outdoor breeze', gale: 'Outdoor gale', stage: 'On a stage', straps: 'Top straps' };
 function applyExample(name, quiet) {               // an example is a whole wall: it replaces every setting (Undo brings yours back)
   if (!quiet) undoSnap = clone(S);
   setState(null); ui.selected = -1; fillCabModels();
@@ -172,6 +176,10 @@ function applyExample(name, quiet) {               // an example is a whole wall
     S.stage.on = true; S.stage.h = 1.2; S.stage.depth = 6; S.stage.front = 4.6;
   }
   if (name === 'quake') { S.indoorCase = 'quake'; S.quake = { pga: 0.24, floor: 1, dur: 12 }; sheetBallast(); }
+  if (name === 'weaklock') {
+    S.indoorCase = 'knock'; S.knock = { kgf: 60, h: 1.2, from: 'rear', dur: 0.3, share: 2 }; S.ballastAuto = false; S.ballastPer = 9.055; S.ballast = null;
+    S.locks = Object.assign(S.locks, { on: true, fixKgf: 6, fixN: 2, lockKgf: 6, lockN: 2, edge: 1.5, stiff: 1 });
+  }
   if (name === 'breeze') { S.mode = 'outdoor'; S.outSpeed = 8; S.gust = 0.3; }
   if (name === 'gale') { S.mode = 'outdoor'; S.outSpeed = 14; S.gust = 0.4; S.ballastAuto = false; S.ballastPer = 300; S.ballast = null; }
   if (name === 'stage') { S.mode = 'outdoor'; S.outSpeed = 8; S.gust = 0.3; S.stage.on = true; S.stage.h = 1.6; S.stage.depth = 6; S.stage.front = 4.6; }
@@ -201,9 +209,9 @@ function syncRunUI() {
   const res = $('vsRes'), r = fin ? ui.result : null;                      // what the run came to, in the strip under the view (it never covers the wall)
   res.hidden = !r;
   if (r) {
-    res.dataset.s = r.kind;
-    res.querySelector('use').setAttribute('href', r.kind === 'held' ? '#i-check' : '#i-x');
-    setText('vsResK', r.kind === 'held' ? 'Held' : 'Toppled'); setText('vsResT', r.text);
+    res.dataset.s = r.kind === 'lost' ? 'warn' : r.kind;
+    res.querySelector('use').setAttribute('href', r.kind === 'held' ? '#i-check' : r.kind === 'lost' ? '#i-warn' : '#i-x');
+    setText('vsResK', r.kind === 'held' ? 'Held' : r.kind === 'lost' ? 'Cabinets off' : 'Toppled'); setText('vsResT', r.text);
   }
   $('btnStart3').querySelector('span').textContent = idle ? 'Start simulation' : 'Restart simulation';
 }
@@ -213,12 +221,13 @@ function pauseSim() { if (ui.run === 'running') ui.run = 'paused'; else if (ui.r
 function finishRun(r) { ui.result = r; ui.run = 'finished'; syncRunUI(); }
 function checkFinish() {                           // a toppled wall ends the run; so does a one-off load (gust, knock, earthquake) once the wall has settled
   if (ui.run !== 'running' || ui.result) return;
-  if (sim.toppled && sim.phi > 1.2) { finishRun({ kind: 'toppled', text: 'The wall toppled after ' + nf1(sim.toppledAt) + ' s.' }); return; }
+  const off = sim.lk && sim.lkLost ? sim.lkCount : 0, offTxt = off ? lockPlural(off, 'cabinet', 'cabinets') : '';
+  if (sim.toppled && sim.phi > 1.2) { finishRun({ kind: 'toppled', text: 'The wall toppled after ' + nf1(sim.toppledAt) + ' s.' + (off ? ' ' + offTxt + ' had come off before that.' : '') }); return; }
   const done = sim.doneAt;
   if (done !== null && !sim.toppled && sim.t > done + 3.5) {
     const lean = sim.maxPhi * 180 / Math.PI, lift = Math.sin(sim.maxPhi) * D.geom.depth * 1000;
     const brief = D.status === 'tipping' ? ' It held only because the load was brief.' : '';          // the safety factor above treats the load as lasting
-    finishRun({ kind: 'held', text: (sim.maxPhi < 2e-4 ? 'It did not even lift.' : 'Leaned at most ' + nf(lean, lean < 10 ? 1 : 0) + '°, the base lifted ' + nf(lift, lift < 100 ? 1 : 0) + ' mm.') + brief });
+    finishRun({ kind: off ? 'lost' : 'held', text: (off ? 'The wall held, but ' + offTxt + (off === 1 ? ' came' : ' came') + ' off. ' : '') + (sim.maxPhi < 2e-4 ? 'It did not even lift.' : 'Leaned at most ' + nf(lean, lean < 0.1 ? 2 : lean < 10 ? 1 : 0) + '°, the base lifted ' + nf(lift, lift < 100 ? 1 : 0) + ' mm.') + brief });
   }
 }
 
@@ -265,6 +274,101 @@ function initKeys() {                              // Space starts or pauses, Es
     if (e.key === ' ') { e.preventDefault(); if (ui.run === 'idle') startSim(); else if (ui.run === 'finished') startSim(); else pauseSim(); }
     else if (e.key === 'Escape' && ui.run !== 'idle') endSim();
   });
+}
+
+/* ------------------------------------------------------------------ cabinet locks */
+const LK_LN = Math.log(1 + 20000);
+const kgfToPos = (kgf) => 1000 * Math.log(1 + Math.max(0, kgf)) / LK_LN;
+const posToKgf = (pos) => { const v = Math.expm1(pos / 1000 * LK_LN); return v < 10 ? Math.round(v * 10) / 10 : v < 100 ? Math.round(v) : Math.round(v / 5) * 5; };       // neat numbers off the slider
+const fmtKgf = (v) => (v <= 0 ? '0' : String(+(+v).toFixed(v < 10 ? 1 : 0)));
+const lockWhat = (L) => (L.kind === 'wind' ? 'wind' : L.kind === 'accel' ? 'shaking' : 'push');
+function cabName(L, i) {
+  const r = Math.floor(i / L.cols), c = i - r * L.cols;
+  const rowTxt = L.rows === 1 ? 'the only row' : r === L.rows - 1 ? 'top row' : r === 0 ? 'bottom row' : 'row ' + (r + 1) + ' from the bottom';
+  const colTxt = L.cols === 1 ? '' : c === 0 ? ', far left' : c === L.cols - 1 ? ', far right' : ', column ' + (c + 1) + ' from the left';
+  return rowTxt + colTxt;
+}
+function lockAtText(L, lam) {                                // the load at a load factor, in the units of the load in play
+  if (L.kind === 'wind') { const v = L.unit.v * Math.sqrt(lam); return nf1(v) + ' m/s, Beaufort ' + M.beaufort(v); }
+  if (L.kind === 'accel') return nf2(L.unit.g * lam) + ' g';
+  return nf0(L.unit.kgf * lam) + ' kgf';
+}
+const lockPlural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+function lockSentence(L) {                                   // what the check comes to, as one paragraph
+  const what = lockWhat(L), sf = nf2(S.SF), first = L.events[0], g0 = L.groups[0];
+  const cabs = (n) => (n === 1 && !L.truncated ? '1 cabinet comes' : lockPlural(n, 'cabinet', 'cabinets') + (L.truncated ? ' or more' : '') + ' come') + ' off';
+  if (!L.active) return L.why;
+  if (!L.entered) return 'At your ' + what + ' a cabinet carries ' + nf1(L.load.mean) + ' kgf' + (L.load.max > L.load.mean * 1.02 ? ' (up to ' + nf1(L.load.max) + ' kgf at the corners)' : '') + ' and the busiest frame fixing holds ' + nf2(L.peak.fix) + ' kgf. To keep your ' + sf + '× margin the fixings must be rated for at least ' + nf2(L.need.fix) + ' kgf and the cabinet locks for at least ' + nf2(L.need.lock) + ' kgf. Type the strength of your locks to see which one lets go first.';
+  if (!first) return 'Nothing lets go: the locks you entered are never loaded past their strength here.';
+  const where = cabName(L, g0.rep.i) + ' (' + (g0.rep.kind === 0 ? 'a frame fixing' : 'a cabinet lock') + ')';
+  const hang = (L.truncated ? 'So far every' : 'Every') + ' cabinet still hangs on, held by its neighbours.';
+  const more = L.truncated ? ' The calculation stops after ' + L.events.length + ' failures but the failure runs on, so the real number is higher.' : '';
+  if (L.status === 'ok') return 'With your locks nothing lets go at your ' + what + ', or with your margin of ' + sf + '×. The first lock goes at ' + nf1(L.lamFirst) + '× your ' + what + ' (' + lockAtText(L, L.lamFirst) + '): ' + where + '.';
+  if (L.status === 'marginal') return 'Nothing lets go at your ' + what + ', but inside your margin of ' + sf + '× the first lock goes, at ' + nf2(L.lamFirst) + '× (' + lockAtText(L, L.lamFirst) + '): ' + where + '. ' + (L.lostAtSF > 0 ? cabs(L.lostAtSF) + ' by ' + sf + '×.' : hang) + more;
+  return 'At your ' + what + ' the first lock lets go: ' + where + '. ' + (L.lostAt1 > 0 ? cabs(L.lostAt1) + '.' : hang) + (L.lostAt1 < L.lostAtSF ? ' With your margin of ' + sf + '×, ' + cabs(L.lostAtSF) + '.' : '') + more;
+}
+function renderLockStrip() {                                 // one line in the strip under the picture, and the chip on the picture
+  const L = Dlk, row = $('vsLk'), lost = L && sim.lk && sim.lkLost ? sim.lkCount : 0, live = ui.run !== 'idle' && lost > 0;
+  $('lkPill').hidden = !(ui.run !== 'idle' && lost > 0);
+  if (lost > 0) setText('lkPillText', lockPlural(lost, 'cabinet off', 'cabinets off'));
+  if (!L || !L.active || (!L.entered && !live) || (ui.run === 'finished' && ui.result && ui.result.kind === 'lost')) { row.hidden = true; return; }       // the result row already says it
+  let sx, t;
+  if (live) { sx = 'toppled'; t = lockPlural(lost, 'cabinet has', 'cabinets have') + ' come off'; }
+  else if (L.status === 'ok') { sx = 'held'; t = 'nothing comes off' + (isFinite(L.lamFirst) ? '. The first lock goes at ' + nf1(L.lamFirst) + '× your ' + lockWhat(L) : ''); }
+  else if (L.status === 'marginal') { sx = 'warn'; t = 'a lock goes inside your margin, at ' + nf2(L.lamFirst) + '× your ' + lockWhat(L); }
+  else { sx = 'toppled'; t = L.lostAt1 > 0 ? lockPlural(L.lostAt1, 'cabinet comes', 'cabinets come') + ' off at your ' + lockWhat(L) : 'a lock lets go at your ' + lockWhat(L); }
+  row.hidden = false; row.dataset.s = sx; setText('vsLkT', t);
+  $('vsLkIcon').querySelector('use').setAttribute('href', sx === 'held' ? '#i-check' : sx === 'warn' ? '#i-warn' : '#i-x');
+}
+function renderLocks() {
+  const L = Dlk;
+  $('lockSec').hidden = !L; $('lockFig').hidden = !L;
+  renderLockStrip();
+  if (!L) return;
+  const sf = nf2(S.SF);
+  setText('lockText', lockSentence(L));
+  setText('lkLoadK', L.kind === 'wind' ? 'Wind on one cabinet' : L.kind === 'accel' ? 'Shaking on one cabinet' : 'Push on the cabinet');
+  setText('lkLoad', nf1(L.kind === 'force' ? L.load.max : L.load.mean) + ' ');
+  $('lkLoad').appendChild(el('small', null, 'kgf'));
+  setText('lkLoadS', !L.active ? 'not pulled off the frame' : L.kind === 'wind' ? (L.load.max > L.load.mean * 1.02 ? 'up to ' + nf1(L.load.max) + ' kgf at the corners' : 'the same on every cabinet') : L.kind === 'accel' ? 'its own weight times the acceleration' : cabName(L, L.knockAt));
+  const tile = (id, v, sub) => { setText(id, nf2(v) + ' '); $(id).appendChild(el('small', null, 'kgf')); setText(id + 'S', sub); };
+  tile('lkFix', L.peak.fix, L.active && L.peak.fix > 0 ? cabName(L, L.peak.fixAt) + (L.TfKgf > 0 ? ' · ' + nf0(L.peak.fix / L.TfKgf * 100) + '% of ' + nf1(L.TfKgf) + ' kgf' : '') : '–');
+  tile('lkLock', L.peak.lock, !L.active || L.peak.fix <= 0 ? '–' : L.peak.lock < 0.01 * L.peak.fix ? 'almost none: the load is even' : cabName(L, L.peak.lockAt) + (L.TlKgf > 0 ? ' · ' + nf0(L.peak.lock / L.TlKgf * 100) + '% of ' + nf1(L.TlKgf) + ' kgf' : ''));
+  tile('lkNeed', L.need.fix, 'for each fixing, and ' + nf2(L.need.lock) + ' kgf for each cabinet lock, at your ' + sf + '× margin');
+  const rows = $('lockRows'); rows.textContent = '';
+  setText('lkThAt', 'At (' + (L.kind === 'wind' ? 'wind' : L.kind === 'accel' ? 'shaking' : 'push') + ')');
+  if (!L.groups.length) { const tr = el('tr'), td = el('td', null, !L.active ? L.why : L.entered ? 'Nothing lets go.' : 'Type the strength of your locks to see the order.'); td.colSpan = 5; tr.appendChild(td); rows.appendChild(tr); }
+  L.groups.slice(0, 24).forEach((g, k) => {
+    const tr = el('tr');
+    const kinds = [g.fix ? lockPlural(g.fix, 'fixing', 'fixings') : '', g.lock ? lockPlural(g.lock, 'cabinet lock', 'cabinet locks') : ''].filter(Boolean).join(' and ');
+    tr.appendChild(el('td', 'lk-n', String(k + 1)));
+    tr.appendChild(el('td', null, cabName(L, g.rep.i) + (g.hit.length > 1 ? ' and ' + lockPlural(g.hit.length - 1, 'other', 'others') : '')));
+    tr.appendChild(el('td', null, kinds));
+    tr.appendChild(el('td', null, nf2(g.lam) + '× (' + lockAtText(L, g.lam) + ')'));
+    tr.appendChild(el('td', null, String(g.lostTotal)));
+    rows.appendChild(tr);
+  });
+  if (L.groups.length > 24 || L.truncated) { const tr = el('tr'), td = el('td', null, L.groups.length > 24 ? '… and ' + (L.groups.length - 24) + ' more steps.' : 'The list stops here: the failure runs on.'); td.colSpan = 5; tr.appendChild(td); rows.appendChild(tr); }
+  setText('lockSub', L.useKind === 'strength' ? 'how hard each cabinet is held, against your lock strengths' : 'how hard each cabinet is held, against the busiest one');
+  const keys = $('lockKeys'); keys.textContent = '';
+  const key = (cls, txt) => { const sp = el('span', 'lkkey'); sp.appendChild(el('i', cls)); sp.appendChild(document.createTextNode(txt)); keys.appendChild(sp); };
+  if (L.useKind === 'strength') { keys.appendChild(document.createTextNode('0')); const b = el('i', 'lkbar'); b.style.background = 'linear-gradient(90deg,' + [0, 0.25, 0.5, 0.65, 0.8, 0.9, 1].map((u) => lockColor(u, 'strength') + ' ' + (u * 100) + '%').join(',') + ')'; keys.appendChild(b); keys.appendChild(document.createTextNode('the strength you typed')); }
+  else { keys.appendChild(document.createTextNode('lightly held')); const b = el('i', 'lkbar'); b.style.background = 'linear-gradient(90deg,' + [0, 0.5, 1].map((u) => lockColor(u, 'relative') + ' ' + (u * 100) + '%').join(',') + ')'; keys.appendChild(b); keys.appendChild(document.createTextNode('the busiest')); }
+  key('ring', 'lost a lock, still on'); key('gone', 'came off'); keys.appendChild(el('span', null, 'numbers: the order they let go'));
+  $('segLkLam').style.display = L.entered ? '' : 'none';
+}
+function lockTipFill(tip, i) {
+  const L = Dlk, r = Math.floor(i / L.cols), c = i - r * L.cols;
+  tip.textContent = '';
+  tip.appendChild(el('div', 't', cabName(L, i)));
+  const row = (a, b) => { const d = el('div', 'r'); d.appendChild(el('span', null, a)); d.appendChild(el('b', null, b)); tip.appendChild(d); };
+  const left = c > 0 ? L.lockH[i - 1] : 0, right = L.lockH[i], up = L.lockV[i], down = r > 0 ? L.lockV[i - L.cols] : 0;
+  row(L.kind === 'wind' ? 'Wind on it' : L.kind === 'accel' ? 'Shaking on it' : 'Push on it', nf2(L.F[i]) + ' kgf');
+  row('Each frame fixing', nf2(L.fixF[i]) + ' kgf' + (L.TfKgf > 0 ? ' · ' + nf0(L.fixF[i] / L.TfKgf * 100) + '%' : ''));
+  row('Locks to neighbours', 'L ' + nf2(left) + ' · R ' + nf2(right) + ' · up ' + nf2(up) + ' · down ' + nf2(down));
+  const g = L.groups.findIndex((gr) => gr.hit.indexOf(i) >= 0), lostG = L.groups.findIndex((gr) => gr.lost.indexOf(i) >= 0);
+  if (lostG >= 0) row('Comes off', 'step ' + (lostG + 1) + ' at ' + nf2(L.groups[lostG].lam) + '×');
+  else if (g >= 0) row('A lock lets go', 'step ' + (g + 1) + ' at ' + nf2(L.groups[g].lam) + '×');
 }
 
 /* ------------------------------------------------------------------ controls */
@@ -346,6 +450,15 @@ function initControls() {
   bindPair('STM', { get: () => S.stage.muDeck, set: (v) => (S.stage.muDeck = v), fmt: (v) => (+v).toFixed(2) });
   bindPair('EI', { get: () => S.EI / 1e6, set: (v) => (S.EI = v * 1e6), fmt: (v) => (+v).toFixed(2), toSlider: (mn) => EI_POS(mn), fromSlider: (pos) => EI_MN(pos) });
   bindPair('DL', { get: () => S.defLimit, set: (v) => (S.defLimit = v), fmt: (v) => String(Math.round(v)) });
+  // cabinet locks
+  bindPair('LF', { get: () => S.locks.fixKgf, set: (v) => (S.locks.fixKgf = Math.max(0, v)), fmt: fmtKgf, toSlider: kgfToPos, fromSlider: posToKgf });
+  bindPair('LL', { get: () => S.locks.lockKgf, set: (v) => (S.locks.lockKgf = Math.max(0, v)), fmt: fmtKgf, toSlider: kgfToPos, fromSlider: posToKgf });
+  bindPair('LN', { get: () => S.locks.fixN, set: (v) => (S.locks.fixN = Math.round(v)), fmt: (v) => String(Math.round(v)) });
+  bindPair('LM', { get: () => S.locks.lockN, set: (v) => (S.locks.lockN = Math.round(v)), fmt: (v) => String(Math.round(v)) });
+  bindPair('LE', { get: () => S.locks.edge, set: (v) => (S.locks.edge = v), fmt: (v) => (+v).toFixed(2) });
+  bindPair('LS', { get: () => S.locks.stiff, set: (v) => (S.locks.stiff = v), fmt: (v) => (+v).toFixed(2), toSlider: (v) => 1000 * (Math.log10(clamp(v, 0.1, 10)) + 1) / 2, fromSlider: (pos) => Math.round(Math.pow(10, pos / 500 - 1) * 100) / 100 });
+  segs.lock = bindSeg('segLock', (v) => { S.locks.on = v === 'on'; update(); });
+  segs.lkLam = bindSeg('segLkLam', (v) => { ui.lkLam = v; segs.lkLam.set(v); dirty.lock = true; });
   // stage
   bindPair('STH', { get: () => S.stage.h, set: (v) => (S.stage.h = v), fmt: (v) => (+v).toFixed(2) });
   bindPair('STD', { get: () => S.stage.depth, set: (v) => (S.stage.depth = v), fmt: (v) => (+v).toFixed(1) });
@@ -391,7 +504,7 @@ function initControls() {
   $('btnAutoN').addEventListener('click', () => { S.autoN = !S.autoN; update(); });
   document.querySelectorAll('[data-dir]').forEach((b) => b.addEventListener('click', () => { S.windDir = +b.dataset.dir; update(); }));
   selectSet = initTabs('setTabs', (n) => { ui.tab = n; saveSoon(); });
-  selectRes = initTabs('resTabs', (n) => { ui.rtab = n; dirty.rear = dirty.map = dirty.bend = true; saveSoon(); });
+  selectRes = initTabs('resTabs', (n) => { ui.rtab = n; dirty.rear = dirty.map = dirty.bend = dirty.lock = true; saveSoon(); });
   document.querySelectorAll('[data-goto]').forEach((b) => b.addEventListener('click', () => { selectSet(b.dataset.goto); scrollRailTop(); }));
   document.querySelectorAll('[data-sf]').forEach((b) => b.addEventListener('click', () => { S.SF = +b.dataset.sf; update(); }));
   $('btnNew').addEventListener('click', newWall);
@@ -425,6 +538,8 @@ function syncControls() {
   segs.cab.set(S.cabSize); if ($('cabModel').value !== S.cab) $('cabModel').value = S.cab;
   segs.stage.set(S.stage.on ? 'on' : 'off'); segs.rest.set(S.rest.type); segs.rto.set(S.rest.to); segs.rside.set(S.rest.side); segs.prof.set(S.profile);
   segs.cam.set(ui.cam); segs.exag.set(ui.exag);
+  segs.lock.set(S.locks.on ? 'on' : 'off'); segs.lkLam.set(ui.lkLam); $('lockBox').hidden = !S.locks.on; $('lockIntro').hidden = S.locks.on;
+  $('LE-n').closest('.ctl').hidden = D.loadKind !== 'wind';                      // the extra wind on the edges is a wind thing
   const indoorNow = S.mode === 'indoor', cs = indoorNow ? S.indoorCase : 'outdoor';
   $('indoorPick').hidden = !indoorNow; $('cmpSec').hidden = !indoorNow;
   $('windIndoor').hidden = !(indoorNow && cs === 'draught'); $('windOutdoor').hidden = indoorNow;
@@ -477,6 +592,10 @@ function renderText() {
     : nf1(D.Wb) + ' kg in total on ' + D.N + ' bases, ' + nf1(avg) + ' each. ' + (D.req.none ? 'Nothing is needed here.' : D.req.capped ? 'Ballast alone cannot reach your margin here.' : 'Needed: ' + nf2(D.req.per) + ' kg per base.'));
   const needBtn = $('btnUseNeed'); needBtn.hidden = S.ballastAuto || D.req.none || D.req.capped || Math.abs(D.req.per - avg) < 0.05; needBtn.textContent = 'Use ' + nf1(Math.ceil(D.req.per * 10) / 10) + ' kg per base';
   setText('posNote', 'arm ' + nf(g.aB, 3) + ' m from the toe');
+  const lc = S.locks;
+  setHint('LF-h', lc.fixKgf > 0 ? nf2(lc.fixKgf * M.G / 1000) + ' kN. The load one fixing holds before it lets go.' : 'Not entered, so no fixing will let go. Type the load it breaks at (1 kN is about 102 kgf).');
+  setHint('LL-h', lc.lockKgf > 0 ? nf2(lc.lockKgf * M.G / 1000) + ' kN. The load one lock holds before it lets go.' : 'Not entered, so no cabinet lock will let go. Type the load it breaks at.');
+  setHint('LE-h', lc.edge > 1.001 ? 'Cabinets on the top edge and the side edges feel ' + nf2(lc.edge) + '× the wind, corner cabinets more. Real walls feel more there.' : 'The same wind on every cabinet.');
   setText('modeHint', outdoor ? 'Open-air wind with gusts. The sheet is written for indoor use, so treat this as a rough guide.' : 'Draught from air conditioning, fans and doors. Uses the wind scale from the sheet, which is the Beaufort scale.');
   const row = M.SCALE[S.indoorScale];
   setText('SC-v', S.indoorScale + ' · ' + row.v + ' m/s');
@@ -555,7 +674,7 @@ function renderText() {
   $('tTip').firstChild.textContent = lv.infin ? '∞' : lv.crit; $('tTip').querySelector('small').textContent = lv.infin ? '' : lv.unit;
   setText('tTipS', lv.infin ? lv.none : lv.critS);
 
-  renderBend(); renderMoments(); renderChecks(); renderSheet(); renderTables(); renderIndoor(); renderStrip(avg);
+  renderBend(); renderMoments(); renderChecks(); renderSheet(); renderTables(); renderIndoor(); renderStrip(avg); renderLocks();
   setText('planInfo', isWind ? nf0(w.cn * 100) + '% pushes the screen · ' + nf0(Math.abs(w.sinT) * 100) + '% slides along it'
     : kindL === 'force' ? (S.knock.from === 'both' ? 'the push is checked from the front and from the rear' : 'push from the ' + S.knock.from)
     : 'the floor moves front to back; the wall tips whichever way is weaker');
@@ -869,8 +988,9 @@ function updateHud() {
   const topNow = D.shake ? Math.abs(nodes[Kn]) + tiltTop : (nodes[Kn] + tiltTop) * (D.dir === 'rear' ? 1 : -1);
   const topMm = Math.abs(topNow) * 1000;
   const sp = D.strap, Tn = sp ? sim.Ph / (sp.cb * sp.n) : 0;
-  const key = [s, hc.join('~'), deg.toFixed(2), sim.liftMM(D.geom.depth).toFixed(0), topMm.toFixed(topMm < 10 ? 1 : 0), Tn.toFixed(0), sim.broken].join('|');
+  const key = [s, hc.join('~'), deg.toFixed(2), sim.liftMM(D.geom.depth).toFixed(0), topMm.toFixed(topMm < 10 ? 1 : 0), Tn.toFixed(0), sim.broken, sim.lkCount, ui.run].join('|');
   if (key === hudKey) return; hudKey = key;
+  renderLockStrip();
   const pill = $('pill'); pill.dataset.s = s === 'rocking' ? 'marginal' : s === 'falling' ? 'toppled' : s;
   $('btnReplay').classList.toggle('attn', s === 'toppled');
   pill.querySelector('use').setAttribute('href', s === 'stable' ? '#i-check' : s === 'marginal' || s === 'rocking' ? '#i-warn' : '#i-x');
@@ -920,6 +1040,19 @@ function initPointers() {
   const endD = () => { dragD = false; plan.classList.remove('drag'); };
   plan.addEventListener('pointerup', endD); plan.addEventListener('pointercancel', endD);
 
+  const lm = $('lockMap'), ltip = $('lockTip');
+  const lockAt = (e) => {
+    const h = hits.lock; if (!h || !Dlk) return;
+    const p = ptr(e, lm), c = Math.floor((p.x - h.x0) / h.cw), r = h.rows - 1 - Math.floor((p.y - h.y0) / h.ch);
+    if (p.x < h.x0 || p.y < h.y0 || c < 0 || c >= h.cols || r < 0 || r >= h.rows) { leaveLock(); return; }
+    const i = r * h.cols + c; if (hits.lockHover !== i) { hits.lockHover = i; dirty.lock = true; }
+    lockTipFill(ltip, i); ltip.hidden = false;
+    const wr = lm.getBoundingClientRect(), tw = ltip.offsetWidth, th = ltip.offsetHeight;
+    let tx = p.x + 14, ty = p.y - th - 10; if (tx + tw > wr.width - 4) tx = p.x - tw - 14; if (ty < 2) ty = p.y + 14;
+    ltip.style.left = Math.max(2, tx) + 'px'; ltip.style.top = Math.max(2, ty) + 'px';
+  };
+  const leaveLock = () => { if (hits.lockHover != null && hits.lockHover >= 0) dirty.lock = true; hits.lockHover = -1; ltip.hidden = true; };
+  lm.addEventListener('pointermove', lockAt); lm.addEventListener('pointerdown', lockAt); lm.addEventListener('pointerleave', leaveLock);
   const map = $('map'), tip = $('mapTip'); let dragM = false;
   const setMap = (e) => {
     const h = hits.map; if (!h) return; const p = ptr(e, map); let v = hits.vAt(p.x);
@@ -996,6 +1129,9 @@ function frame(now) {
   if (dirty.rear && shown('rear')) { safe('rear', () => drawRear($('rear'), st, hits)); dirty.rear = false; }
   if (dirty.map && shown('map')) { safe('map', () => drawMap($('map'), st, hits)); dirty.map = false; }
   if (dirty.bend && shown('bendC')) { safe('bend', () => drawBend($('bendC'), st)); dirty.bend = false; }
+  const lkNow = Dlk ? sim.lkI + ':' + sim.lkCount + ':' + ui.run : '';
+  if (lkNow !== lkKey) { lkKey = lkNow; dirty.lock = true; }
+  if (dirty.lock && Dlk && shown('lockMap')) { safe('lock', () => drawLockMap($('lockMap'), st, hits)); dirty.lock = false; }
   safe('hud', updateHud);
   requestAnimationFrame(frame);
 }
@@ -1013,13 +1149,13 @@ function init() {
   selectSet(ui.tab); selectRes(ui.rtab);
   update(); sim.reset();
   if (restored && JSON.stringify(S) !== JSON.stringify(M.defaults())) toast('Your last wall is back. Press New wall to start again.', false);
-  for (const id of ['rear', 'map', 'bendC']) new ResizeObserver(() => { dirty.rear = dirty.map = dirty.bend = true; }).observe($(id));
+  for (const id of ['rear', 'map', 'bendC', 'lockMap']) new ResizeObserver(() => { dirty.rear = dirty.map = dirty.bend = dirty.lock = true; }).observe($(id));
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { dirty.rear = dirty.map = dirty.bend = true; });
   const themeChanged = () => { resetTheme(); dirty.rear = dirty.map = dirty.bend = true; };
   try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', themeChanged); } catch (e) { /* older browsers */ }
   new MutationObserver(themeChanged).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] });
-  window.__led = { S, sim, ui, hits, st, get D() { return D; }, M, update, loadScenario, applyExample, newWall, undo, startSim, endSim, pauseSim, setState,
-    redraw() { drawSide($('side'), st); if (shown('front')) drawFront($('front'), st); if (shown('plan')) drawPlan($('plan'), st, hits); if (shown('rear')) drawRear($('rear'), st, hits); if (shown('map')) drawMap($('map'), st, hits); if (shown('bendC')) drawBend($('bendC'), st); updateHud(); },
+  window.__led = { S, sim, ui, hits, st, get D() { return D; }, get Dlk() { return Dlk; }, M, update, loadScenario, applyExample, newWall, undo, startSim, endSim, pauseSim, setState,
+    redraw() { drawSide($('side'), st); if (shown('front')) drawFront($('front'), st); if (shown('plan')) drawPlan($('plan'), st, hits); if (shown('rear')) drawRear($('rear'), st, hits); if (shown('map')) drawMap($('map'), st, hits); if (shown('bendC')) drawBend($('bendC'), st); if (Dlk && shown('lockMap')) drawLockMap($('lockMap'), st, hits); updateHud(); },
     bench(n) { n = n || 30; const t0 = performance.now(); for (let i = 0; i < n; i++) { drawSide($('side'), st); drawFront($('front'), st); drawPlan($('plan'), st, hits); } const t1 = performance.now(); for (let i = 0; i < n; i++) { drawMap($('map'), st, hits); drawRear($('rear'), st, hits); drawBend($('bendC'), st); } const t2 = performance.now(); const t3 = performance.now(); for (let i = 0; i < n; i++) { M.derive(S); } const t4 = performance.now(); return { perFrameMs: (t1 - t0) / n, perDirtyMs: (t2 - t1) / n, deriveMs: (t4 - t3) / n }; } };
   requestAnimationFrame(frame);
 }

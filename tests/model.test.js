@@ -291,6 +291,110 @@ for (let n = 1; n <= 10; n++) {   // outdoors at the top of a force gives the sh
   }
 }
 
+/* ---- 11. cabinet locks: loads shared through the locks, and the most loaded lock letting go first ---- */
+{
+  const f64 = (...a) => Float64Array.from(a);
+  // two cabinets side by side, the load on the first one only; worked by hand: (g + k) w0 - k w1 = F, (g + k) w1 - k w0 = 0, with g = k = 1
+  let r = M.lockNet({ cols: 2, rows: 1, F: f64(1, 0), fixN: 1, lockN: 1, kl: 1, Tf: 0, Tl: 0 });
+  eq('the loaded cabinet moves 2/3', r.x[0], 2 / 3, 1e-9); eq('its neighbour 1/3', r.x[1], 1 / 3, 1e-9);
+  eq('the lock between them carries 1/3', r.lockH[0], 1 / 3, 1e-9);
+  eq('the frame holds the whole load', r.reaction, 1, 1e-9);
+  ok('nothing is entered, so nothing lets go', r.events.length === 0 && r.lamFirst === Infinity);
+  // a stiffer lock shares more: k = 3 gives w1 = 3/4 w0 ... (1 + 3) w0 - 3 w1 = 1, (1 + 3) w1 - 3 w0 = 0
+  r = M.lockNet({ cols: 2, rows: 1, F: f64(1, 0), fixN: 1, lockN: 1, kl: 3, Tf: 0, Tl: 0 });
+  eq('a stiff lock shares more', r.x[1] / r.x[0], 3 / 4, 1e-9); eq('and the loaded one moves 4/7', r.x[0], 4 / 7, 1e-9);
+  // two fixings of 3 N under a 10 N load: 5 N each, so the first goes at 0.6, and the second takes 10 N at once
+  r = M.lockNet({ cols: 1, rows: 1, F: f64(10), fixN: 2, lockN: 0, kl: 1, Tf: 3, Tl: 0, lamStop: 2 });
+  eq('two 3 N fixings under 10 N give way at 0.6', r.lamFirst, 0.6, 1e-9);
+  ok('the second goes at the same load and the cabinet comes off', r.events.length === 2 && r.events[1].lam === r.events[0].lam && r.events[1].lost[0] === 0 && r.lostAt(0.6) === 1 && r.lostAt(0.59) === 0, JSON.stringify(r.events.map((e) => e.lam)));
+  // an even load: every cabinet carries its own load, nothing is shared, so nothing is weaker than anything else and they all let go together
+  r = M.lockNet({ cols: 4, rows: 3, F: new Float64Array(12).fill(4), fixN: 2, lockN: 2, kl: 1, Tf: 1, Tl: 1, lamStop: 5 });
+  eq('an even load goes straight into each cabinet\'s own fixings', r.fixF[5], 2, 1e-9);
+  ok('and the locks carry none of it', Math.max(...r.lockH, ...r.lockV) < 1e-9);
+  ok('so the whole wall goes at once', r.events[0].n === 12 && Math.abs(r.events[0].lam - 0.5) < 1e-9 && r.events[r.events.length - 1].lostTotal === 12);
+  // an uneven load: the cabinet that is pulled hardest goes first, and its neighbour that has to take over comes next
+  const F3 = f64(1, 1, 3, 1, 1);
+  r = M.lockNet({ cols: 5, rows: 1, F: F3, fixN: 1, lockN: 1, kl: 1, Tf: 4, Tl: 0, lamStop: 10 });
+  ok('the cabinet pulled hardest goes first', r.events[0].rep.i === 2 && r.fixAt === 2, r.events[0].rep.i);
+  ok('loads and failure loads are in order', r.events.every((e, i) => i === 0 || e.lam >= r.events[i - 1].lam - 1e-12));
+  // locks that cannot break (not entered) hold a cabinet whose fixings have gone, and hand its load to the neighbours
+  const keep = M.lockNet({ cols: 3, rows: 1, F: f64(1, 6, 1), fixN: 1, lockN: 2, kl: 1, Tf: 2.5, Tl: 0, lamStop: 10 });
+  ok('a cabinet with no fixing left but locked to its neighbours stays on', keep.events[0].rep.i === 1 && keep.events[0].lost.length === 0, JSON.stringify(keep.events[0]));
+  // doubling the strength doubles the load it takes; doubling the load halves it
+  const mk = (F, Tf) => M.lockNet({ cols: 6, rows: 4, F, fixN: 2, lockN: 2, kl: 1, Tf, Tl: Tf, lamStop: 100 });
+  const F6 = Float64Array.from({ length: 24 }, (_, i) => 3 + (i % 5) + Math.floor(i / 6) * 0.5);
+  eq('twice the strength, twice the load', mk(F6, 20).lamFirst / mk(F6, 10).lamFirst, 2, 1e-9);
+  eq('twice the load, half the load factor', mk(F6.map((v) => v * 2), 10).lamFirst / mk(F6, 10).lamFirst, 0.5, 1e-9);
+  // equilibrium for any network: what the frame holds is exactly what the wind pulls
+  for (const [c, rw, fx, lk, kl] of [[3, 3, 1, 1, 0.2], [7, 2, 4, 3, 5], [1, 6, 2, 0, 1], [9, 9, 2, 2, 1]]) {
+    const F = Float64Array.from({ length: c * rw }, (_, i) => 1 + (i * 7) % 5);
+    const q = M.lockNet({ cols: c, rows: rw, F, fixN: fx, lockN: lk, kl, Tf: 0, Tl: 0 });
+    eq('equilibrium ' + c + 'x' + rw, q.reaction, q.load, 1e-8);
+  }
+
+  // the loads of the load in play
+  const lk = (o, so) => base(Object.assign({ locks: Object.assign({ on: true, fixKgf: 0, fixN: 2, lockKgf: 0, lockN: 2, edge: 1, stiff: 1 }, so || {}) }, o || {}));
+  const forS = (S) => { const D = M.derive(S); return { D, L: M.locksFor(S, D) }; };
+  ok('off means nothing is computed', M.locksFor(base(), M.derive(base())) === null);
+  let { D: Dl, L } = forS(lk());
+  ok('the sheet wall is 28 x 14 cabinets of 0.5 m', L.cols === 28 && L.rows === 14 && L.n === 392);
+  eq('with no edge factor the cabinets together carry the sheet\'s wind force', L.load.total * M.G, Dl.F.N, 1e-9);
+  eq('an even load goes into each cabinet\'s own fixings: half of one cabinet\'s share', L.peak.fix, L.load.mean / 2, 1e-6);
+  eq('the strength you need is the busiest fixing times your margin', L.need.fix, L.peak.fix * 1.5, 1e-12);
+  ok('nothing entered: no verdict', L.status === 'none' && L.useKind === 'relative');
+  ({ D: Dl, L } = forS(lk({}, { edge: 2 })));
+  ok('the top corners feel the most wind', L.peak.fixAt === 13 * 28 || L.peak.fixAt === 13 * 28 + 27, L.peak.fixAt);
+  eq('a corner cabinet feels the edge factor on its top and on its side: 3 times at 2', L.F[13 * 28] / L.F[5 * 28 + 10], 3, 1e-6);
+  eq('an edge cabinet feels it once: 2 times', L.F[13 * 28 + 10] / L.F[5 * 28 + 10], 2, 1e-6);
+  const out = forS(lk({ mode: 'outdoor', outSpeed: 10, profile: 'open' }, { edge: 1 })).L;
+  ok('outdoors the cabinets higher up feel more wind', out.F[13 * 28 + 10] > out.F[0 * 28 + 10] * 1.1, [out.F[13 * 28 + 10], out.F[10]]);
+  // entering the strength that exactly matches the busiest fixing times the margin: the first one lets go at the margin
+  const need = forS(lk({}, { edge: 2 })).L.need.fix;
+  L = forS(lk({}, { edge: 2, fixKgf: need })).L;
+  eq('a fixing rated at the strength you need lets go at the margin', L.lamFirst, 1.5, 1e-6);
+  ok('so the verdict is that it holds the margin, with nothing at all coming off', L.status === 'ok' && L.lostAt1 === 0 && L.lostAtSF === 0, L.status);
+  L = forS(lk({}, { edge: 2, fixKgf: need * 0.9 })).L;
+  ok('a bit weaker, and it lets go inside the margin', L.status === 'marginal' && L.lamFirst < 1.5 && L.lamFirst > 1, [L.status, L.lamFirst]);
+  L = forS(lk({}, { edge: 2, fixKgf: need * 0.5 })).L;
+  ok('half as strong, and it lets go at your wind', L.status === 'fail' && L.lamFirst < 1, [L.status, L.lamFirst]);
+  ok('the first lock to go is on a top corner', [13 * 28, 13 * 28 + 27].indexOf(L.events[0].rep.i) >= 0 && L.events[0].rep.kind === 0, JSON.stringify(L.events[0].rep));
+  eq('wind speed at the first failure is the peak speed times the root of the load factor', L.limit.v, Dl.wind.vPeak * Math.sqrt(L.lamFirst), 1e-9);
+
+  // which loads pull the cabinets off the frame
+  ok('wind from the front presses the cabinets onto the frame', !forS(lk({ windDir: 180 })).L.active && forS(lk({ windDir: 180 })).L.status === 'inactive');
+  ok('wind from the rear pulls them off', forS(lk({ windDir: 0 })).L.active);
+  ok('a push from the front does not pull a cabinet off', !forS(lk({ indoorCase: 'knock', knock: { kgf: 40, h: 1.2, from: 'front', dur: 0.3, share: 2 } })).L.active);
+  const kn = forS(lk({ indoorCase: 'knock', knock: { kgf: 40, h: 1.2, from: 'rear', dur: 0.3, share: 2 } })).L;
+  eq('a knock is one push on one cabinet', kn.load.total * M.G, 40 * M.G, 1e-9);
+  ok('on the cabinet at that height, in the middle of the wall', kn.knockAt === Math.floor((1.2 - 0.1) / 0.5) * 28 + 14, kn.knockAt);
+  ok('and the neighbours take part of it through the locks', kn.peak.lock > 0 && kn.peak.fix < 40 / 2 - 1e-6, [kn.peak.fix, kn.peak.lock]);
+  const qk = forS(lk({ indoorCase: 'quake' })).L;
+  eq('an earthquake shakes every cabinet by its own weight times the acceleration', qk.F[100] * M.G, 6.6 * 0.24 * M.G, 1e-6);
+  ok('a shake pulls them off one way or the other, so it is checked', qk.active);
+
+  // failures within 3% of each other are shown as one step: the steps cover every failure, in order, and add up
+  { const g = forS(lk({ indoorCase: 'knock', knock: { kgf: 60, h: 1.2, from: 'rear', dur: 0.3, share: 2 }, ballastAuto: false, ballastPer: 9.055 }, { fixKgf: 6, lockKgf: 6, edge: 1.5 })).L;
+    ok('a hard shove on one cabinet with weak locks is one step', g.groups.length === 1 && g.groups[0].lostTotal === 1 && g.groups[0].lost[0] === g.knockAt, JSON.stringify(g.groups.map((x) => [x.lam, x.n, x.lostTotal])));
+    eq('and only that cabinet comes off at your load: one cabinet breaks, the rest stand', g.lostAt1, 1, 0);
+    ok('the neighbours that lost a lock are marked, the cabinet itself too', g.groups[0].hit.length === 5 && g.groups[0].hit.indexOf(g.knockAt) >= 0, g.groups[0].hit.length);
+    eq('every failure is in some step', g.groups.reduce((a, x) => a + x.n, 0), g.events.reduce((a, x) => a + x.n, 0), 0);
+    ok('steps are in order of load', g.groups.every((x, i) => i === 0 || x.lam > g.groups[i - 1].lam * 1.03 - 1e-12)); }
+
+  // the simulation: locks let go as the load passes their limit, once each, and a restart puts everything back
+  const wk = lk({ mode: 'outdoor', outSpeed: 12, gust: 0.3, profile: 'open', ballastAuto: true }, { edge: 2, fixKgf: need * 1.6, lockKgf: 0 });
+  const Dw = M.derive(wk), Lw = M.locksFor(wk, Dw), sm = new M.Sim(); sm.setRig(Dw, wk); sm.setLocks(Lw); sm.reset();
+  ok('the weak-lock wind case has something to let go', Lw.events.length > 0 && Lw.lamFirst < 1.0 * 1.6 / 1.5 + 1e-9, Lw.lamFirst);
+  let first = -1, count = 0, peakAtFirst = 0;
+  for (let i = 0; i < 30 * 240; i++) { sm.step(1 / 240); if (sm.lkI > 0 && first < 0) { first = sm.t; peakAtFirst = sm.lamPeak; } count = sm.lkCount; }
+  ok('nothing comes off at the start, and the first lock goes when the load has reached its limit', first > 0.1 && peakAtFirst >= Lw.lamFirst * (1 - 1e-9) && peakAtFirst < Lw.events[Math.min(Lw.events.length - 1, 5)].lam + 0.05, [first, peakAtFirst, Lw.lamFirst]);
+  eq('what has come off is what the sequence says for the highest load reached', count, Lw.net.lostAt(sm.lamPeak), 0);
+  ok('each event fired once, in order', sm.lkI === Lw.events.filter((e) => e.lam <= sm.lamPeak * (1 + 1e-9)).length, [sm.lkI, sm.lamPeak]);
+  sm.reset();
+  ok('a restart puts the cabinets back', sm.lkI === 0 && sm.lkCount === 0 && sm.lamPeak === 0 && sm.lkLost.every((v) => v === 0));
+  sm.setLocks(M.locksFor(wk, Dw)); for (let i = 0; i < 240; i++) sm.step(1 / 240);
+  ok('a new but identical lock result does not wipe the state', sm.lkSig === Lw.sig && sm.lamPeak > 0);
+}
+
 const D1 = M.derive(base({ mode: 'outdoor' }));
 console.log('outdoor default: req per base', D1.req.per.toFixed(1), 'peak v', D1.wind.vPeak.toFixed(2), 'bft', D1.wind.bft, 'top deflection', (D1.bend.topEl * 1000).toFixed(1), 'mm (H/' + D1.bend.ratio.toFixed(0) + ')', 'seam', (D1.bend.seamOpen * 1000).toFixed(3), 'mm');
 console.log(fails ? 'TESTS FAILED: ' + fails + ' of ' + checks : 'ALL ' + checks + ' CHECKS PASSED');

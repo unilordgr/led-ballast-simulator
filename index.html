@@ -380,6 +380,23 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
 }
 @media (prefers-contrast:more){.tn,.tag{border:1px solid var(--ink)}}
 
+
+/* ---------- cabinet locks ---------- */
+.lockwrap{position:relative;background:#0b111a}
+#lockMap{display:block;width:100%;height:clamp(230px,34vw,400px);cursor:crosshair;touch-action:pan-y}
+.lockwrap .tip{min-width:190px}
+.lockwrap .hud.tr2{top:5px;bottom:auto;right:6px}
+.lkpill{margin-top:6px}
+.vs-r[data-s="warn"] .ic,.vs-r[data-s="warn"] b{color:var(--warn-ink)}
+.vs-r[data-s="none"] .ic,.vs-r[data-s="none"] b{color:var(--ink3)}
+.fig .foot i.lkbar,.lkbar{display:inline-block;width:120px;height:10px;border-radius:3px;vertical-align:-1px;margin:0 6px}
+.lkkey i{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:5px;vertical-align:-2px}
+.lkkey i.ring{background:transparent;border:2px solid #fff}
+.lkkey i.gone{background:#080d14;border:1px solid rgba(208,59,59,.75)}
+#lockSec .vtext{margin-bottom:12px}
+#lockSec .vtext b{font-weight:600}
+td.lk-n{font-family:var(--font-mono)}
+
 [hidden]{display:none!important}
 </style>
 </head>
@@ -431,6 +448,7 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
           <button type="button" role="menuitem" data-ex="front">Front draught<small>air from the audience side</small></button>
           <button type="button" role="menuitem" data-ex="door">Door gust<small>5.4 m/s for 1.2 s on the sheet wall</small></button>
           <button type="button" role="menuitem" data-ex="knock">Knock<small>a 60 kgf shove at 1.2 m high</small></button>
+          <button type="button" role="menuitem" data-ex="weaklock">Weak locks<small>a hard shove pops one cabinet off</small></button>
           <button type="button" role="menuitem" data-ex="wobble">Stage wobble<small>1.2 m stage that sways</small></button>
           <button type="button" role="menuitem" data-ex="quake">Earthquake<small>0.24 g, the sheet wall</small></button>
           <div class="menu-h">Outdoors</div>
@@ -518,6 +536,39 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
             <button type="button" class="btn" id="selPlus" aria-label="Add ballast to this base">+</button>
           </div>
           <div class="row" style="margin-top:8px"><button type="button" class="btn sm" id="selAll">Copy to all bases</button><span class="hint" style="margin:0">To edit one base, open Drawings, then Rear view.</span></div>
+        </div>
+      </section>
+      <section class="sec" id="lockCfg">
+        <h2>Cabinet locks <span class="sub">what-if</span></h2>
+        <div class="seg big" id="segLock" role="radiogroup" aria-label="Check the cabinet locks">
+          <button type="button" role="radio" aria-checked="true" data-v="off">Off</button>
+          <button type="button" role="radio" aria-checked="false" data-v="on">Check the locks</button>
+        </div>
+        <p class="hint" id="lockIntro">Finds which cabinet’s lock lets go first. We do not know your lock ratings, so you type them in: it is a what-if, not a prediction.</p>
+        <div id="lockBox" hidden>
+        <div class="ctl">
+          <label for="LF-n">Frame fixing strength <small>holds a cabinet to the back frame</small></label>
+          <div class="ctl-line"><input type="range" id="LF-r" min="0" max="1000" step="1" aria-label="Frame fixing strength slider"><span class="field"><input type="number" id="LF-n" min="0" max="20000" step="any" inputmode="decimal"><span class="u">kgf</span></span></div>
+          <p class="hint" id="LF-h"></p>
+        </div>
+        <div class="ctl">
+          <label for="LN-n">Fixings per cabinet</label>
+          <div class="ctl-line"><input type="range" id="LN-r" min="1" max="8" step="1" aria-label="Fixings per cabinet slider"><span class="field"><input type="number" id="LN-n" min="1" max="16" step="1" inputmode="numeric"><span class="u">×</span></span></div>
+        </div>
+        <div class="ctl">
+          <label for="LL-n">Cabinet lock strength <small>joins neighbouring cabinets</small></label>
+          <div class="ctl-line"><input type="range" id="LL-r" min="0" max="1000" step="1" aria-label="Cabinet lock strength slider"><span class="field"><input type="number" id="LL-n" min="0" max="20000" step="any" inputmode="decimal"><span class="u">kgf</span></span></div>
+          <p class="hint" id="LL-h"></p>
+        </div>
+        <div class="ctl">
+          <label for="LM-n">Locks per joint <small>between two cabinets</small></label>
+          <div class="ctl-line"><input type="range" id="LM-r" min="0" max="8" step="1" aria-label="Locks per joint slider"><span class="field"><input type="number" id="LM-n" min="0" max="16" step="1" inputmode="numeric"><span class="u">×</span></span></div>
+        </div>
+        <div class="ctl">
+          <label for="LE-n">Extra wind on the edges <small>top and sides, 1 = even</small></label>
+          <div class="ctl-line"><input type="range" id="LE-r" min="1" max="3" step="0.05" aria-label="Extra wind on the edges slider"><span class="field"><input type="number" id="LE-n" min="1" max="4" step="0.05" inputmode="decimal"><span class="u">×</span></span></div>
+          <p class="hint" id="LE-h"></p>
+        </div>
         </div>
       </section>
         <div class="pane-next"><button type="button" class="btn pri" data-goto="stage">Next: Stage and straps <svg class="ic"><use href="#i-arrow"/></svg></button></div>
@@ -826,6 +877,11 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
           <div class="ctl-line"><input type="range" id="MU-r" min="0.1" max="1" step="0.05" aria-label="Friction slider"><span class="field"><input type="number" id="MU-n" min="0.05" max="1.5" step="0.05" inputmode="decimal"><span class="u">µ</span></span></div>
         </div>
         <div class="ctl">
+          <label for="LS-n">Lock stiffness <small>against a frame fixing</small></label>
+          <div class="ctl-line"><input type="range" id="LS-r" min="0" max="1000" step="1" aria-label="Lock stiffness slider"><span class="field"><input type="number" id="LS-n" min="0.1" max="10" step="0.1" inputmode="decimal"><span class="u">×</span></span></div>
+          <p class="hint">Only matters when the load is uneven. 1 means a cabinet lock gives as much as a frame fixing. A stiffer lock hands more of a cabinet’s load to its neighbours.</p>
+        </div>
+        <div class="ctl">
           <label for="STM-n">Friction wall on deck <small>used on a stage</small></label>
           <div class="ctl-line"><input type="range" id="STM-r" min="0.1" max="1" step="0.05" aria-label="Wall on deck friction slider"><span class="field"><input type="number" id="STM-n" min="0.05" max="1.5" step="0.05" inputmode="decimal"><span class="u">µ</span></span></div>
         </div>
@@ -850,6 +906,7 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
             <canvas id="side" role="img" aria-label="Side view: LED screen, back frame, base plate, ballast, stage, straps and wind arrows, with the tipping pivot"></canvas>
             <div class="hud tl">
               <div class="pill" id="pill" data-s="stable" role="status"><svg class="ic"><use href="#i-check"/></svg><span id="pillText">Stable</span></div>
+              <div class="pill lkpill" id="lkPill" data-s="toppled" role="status" hidden><svg class="ic"><use href="#i-x"/></svg><span id="lkPillText">1 cabinet off</span></div>
               <dl class="live" id="live">
                 <div><dt id="liveWindK">Wind now</dt><dd id="liveWind">3.3 m/s</dd></div>
                 <div><dt id="liveForceK">Force</dt><dd id="liveForce">68 kgf</dd></div>
@@ -891,6 +948,7 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
           <div class="vs-b">Need <b id="vsNeed">9.1</b> · Have <b id="vsHave">9.1</b> kg per base <span class="tag" id="vsAuto">auto</span></div>
           <div class="vs-c"><span id="vsLoad">Load</span> <button type="button" class="link" id="vsChange">Change</button></div>
           <div class="vs-r" id="vsRes" data-s="" hidden><svg class="ic" id="vsResIcon"><use href="#i-check"/></svg><b id="vsResK">Held</b><span id="vsResT"></span></div>
+          <div class="vs-r" id="vsLk" data-s="" hidden><svg class="ic" id="vsLkIcon"><use href="#i-check"/></svg><b>Locks</b><span id="vsLkT"></span></div>
         </div>
       </div>
       <div class="rtabs">
@@ -924,6 +982,19 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
           <div class="tile"><div class="k" id="tTipK">Tips over at</div><div class="v" id="tTip">4.0<small>m/s</small></div><div class="s" id="tTipS"></div></div>
         </div>
       </section>
+      <section class="sec" id="lockSec" hidden>
+        <h2>Cabinet locks <span class="tag">what-if</span></h2>
+        <p class="vtext" id="lockText" aria-live="polite"></p>
+        <div class="tiles" id="lockTiles">
+          <div class="tile"><div class="k" id="lkLoadK">Load on one cabinet</div><div class="v" id="lkLoad">0<small>kgf</small></div><div class="s" id="lkLoadS"></div></div>
+          <div class="tile"><div class="k">Busiest frame fixing</div><div class="v" id="lkFix">0<small>kgf</small></div><div class="s" id="lkFixS"></div></div>
+          <div class="tile"><div class="k">Busiest cabinet lock</div><div class="v" id="lkLock">0<small>kgf</small></div><div class="s" id="lkLockS"></div></div>
+          <div class="tile"><div class="k" id="lkNeedK">Strength you need</div><div class="v" id="lkNeed">0<small>kgf</small></div><div class="s" id="lkNeedS"></div></div>
+        </div>
+        <details class="tv" id="lockSeq" style="margin:12px -16px -14px"><summary>Failure order</summary>
+          <div class="tablewrap"><table class="data"><thead><tr><th>#</th><th>Where</th><th>What lets go</th><th id="lkThAt">At</th><th>Cabinets off</th></tr></thead><tbody id="lockRows"></tbody></table></div>
+        </details>
+      </section>
         </div>
         <div class="rpane" id="rp-draw" role="tabpanel" aria-labelledby="rt-draw" tabindex="-1" hidden>
           <div class="rest" id="rest">
@@ -945,6 +1016,20 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
           </div>
           <div class="hud bl2"><div class="legend" id="frontLegend" aria-hidden="true"></div></div>
         </div>
+      </figure>
+      <figure class="fig wide" id="lockFig" hidden>
+        <figcaption>Cabinet locks <span class="sub" id="lockSub">how hard each cabinet is held</span></figcaption>
+        <div class="frontwrap lockwrap">
+          <canvas id="lockMap" role="img" aria-label="Face-on map of the cabinets, coloured by how hard their locks are worked, with the order in which locks let go"></canvas>
+          <div class="hud tr2">
+            <div class="seg tiny" id="segLkLam" role="radiogroup" aria-label="Which load to show">
+              <button type="button" role="radio" aria-checked="true" data-v="1">Your load</button>
+              <button type="button" role="radio" aria-checked="false" data-v="sf">With margin</button>
+            </div>
+          </div>
+          <div class="tip" id="lockTip" hidden></div>
+        </div>
+        <div class="foot" id="lockKeys"></div>
       </figure>
       <figure class="fig">
         <figcaption>Rear view <span class="sub" id="rearSub">seen from behind · click a base</span></figcaption>
@@ -1143,6 +1228,8 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
       quake: { pga: 0.24, floor: 1, dur: 12 },                    // ground acceleration in g, building amplification, seconds
       notional: { pct: 2.5 },                                     // % of the weight, sideways
       Cf: 1.0, depth: SHEET.depth, mu: 0.5,
+      // the cabinet locks (a what-if): strengths in kgf per fixing or lock, 0 = not entered; how many per cabinet or joint; wind factor on the top and side edges
+      locks: { on: false, fixKgf: 0, fixN: 2, lockKgf: 0, lockN: 2, edge: 1.5, stiff: 1 },
       frame: { perRow: SHEET.frame.perRow, perBase: SHEET.frame.perBase, perW: SHEET.frame.perW },
       EI: 2.9e6, gaRatio: 0.12, defLimit: 150,
       stage: { on: false, h: 1.2, depth: 6, extra: 2, front: 4.6, deckKgm2: 40, rating: 750, muDeck: 0.4, muFloor: 0.5 },
@@ -1589,6 +1676,242 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
     });
   }
 
+  /* ---- cabinet locks: a what-if on the lock strengths you type in ----
+     Every cabinet is a rigid block that the load pulls away from the back frame. It is held by `fixN` fixings to the frame and by `lockN` locks to
+     each neighbour, all springs. The loads are solved as a network: cabinets are the nodes, the frame is the ground. A cabinet that is pulled harder
+     than its neighbours hands part of its load to them through the locks. The element with the largest load / strength lets go first; the network is
+     solved again without it, and so on. Either one cabinet comes off, or the failure runs on like a zip. With the same springs everywhere and an
+     even load nothing is shared and every cabinet carries its own load, so a weak link only shows where the load or the strength is uneven.
+     All forces are linear in the load factor, so the first failure comes at 1 / (largest ratio) and later ones follow in order. */
+  // a long run of failures is cut off by the work it takes (cabinets times solver passes), not by the clock, so the same wall always gives the same answer
+  const LOCK_EVENTS_MAX = 300, LOCK_WORK_MAX = 2e6, LOCK_LAM_FAR = 1e6;
+
+  // conjugate gradients on the cabinet network (symmetric, positive definite, Jacobi preconditioner); x holds the starting guess and the answer.
+  // w: four work arrays of length n, kept between solves.
+  function lockCG(n, A, dinv, b, x, maxIt, tol2rel, w) {
+    const r = w[0], z = w[1], p = w[2], q = w[3];
+    A(x, q);
+    let bn = 0, rz = 0;
+    for (let i = 0; i < n; i++) { r[i] = b[i] - q[i]; bn += b[i] * b[i]; }
+    if (bn === 0) { x.fill(0); return 0; }
+    for (let i = 0; i < n; i++) { z[i] = r[i] * dinv[i]; p[i] = z[i]; rz += r[i] * z[i]; }
+    const tol2 = tol2rel * bn;
+    let it = 0;
+    for (; it < maxIt; it++) {
+      let rn = 0; for (let i = 0; i < n; i++) rn += r[i] * r[i];
+      if (rn <= tol2) break;
+      A(p, q);
+      let pq = 0; for (let i = 0; i < n; i++) pq += p[i] * q[i];
+      if (!(pq > 0)) break;
+      const alpha = rz / pq; let rz2 = 0;
+      for (let i = 0; i < n; i++) { x[i] += alpha * p[i]; r[i] -= alpha * q[i]; z[i] = r[i] * dinv[i]; rz2 += r[i] * z[i]; }
+      const beta = rz2 / rz; rz = rz2;
+      for (let i = 0; i < n; i++) p[i] = z[i] + beta * p[i];
+    }
+    return it;
+  }
+
+  /* o: { cols, rows, F (N per cabinet at load factor 1, index row * cols + col, row 0 at the bottom), fixN, lockN, kl (a lock's stiffness over a fixing's),
+          Tf, Tl (N that one fixing or lock holds, 0 = not entered), lamStop, workMax } */
+  function lockNet(o) {
+    const cols = o.cols, rows = o.rows, n = cols * rows, F = o.F;
+    const kf = 1, kl = o.kl > 0 ? o.kl : 1, Tf = o.Tf > 0 ? o.Tf : 0, Tl = o.Tl > 0 ? o.Tl : 0;
+    const fixN = clamp(Math.round(o.fixN), 1, 16), lockN = clamp(Math.round(o.lockN), 0, 16);
+    const lamStop = o.lamStop > 0 ? o.lamStop : 1.5, workMax = o.workMax > 0 ? o.workMax : LOCK_WORK_MAX;
+    let work = 0;
+    const alive = new Uint8Array(n).fill(1), nf = new Uint8Array(n).fill(fixN), nlh = new Uint8Array(n), nlv = new Uint8Array(n);
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { const i = r * cols + c; if (c < cols - 1) nlh[i] = lockN; if (r < rows - 1) nlv[i] = lockN; }
+    const x = new Float64Array(n), rhs = new Float64Array(n), dinv = new Float64Array(n), wk = [0, 1, 2, 3].map(() => new Float64Array(n));
+    const A = (v, out) => {
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const i = r * cols + c;
+          if (!alive[i]) { out[i] = 0; continue; }
+          const vi = v[i]; let s = nf[i] * kf * vi;
+          if (c < cols - 1 && nlh[i] && alive[i + 1]) s += nlh[i] * kl * (vi - v[i + 1]);
+          if (c > 0 && nlh[i - 1] && alive[i - 1]) s += nlh[i - 1] * kl * (vi - v[i - 1]);
+          if (r < rows - 1 && nlv[i] && alive[i + cols]) s += nlv[i] * kl * (vi - v[i + cols]);
+          if (r > 0 && nlv[i - cols] && alive[i - cols]) s += nlv[i - cols] * kl * (vi - v[i - cols]);
+          out[i] = s;
+        }
+      }
+    };
+    const solve = (tol2rel) => {
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const i = r * cols + c;
+          if (!alive[i]) { rhs[i] = 0; x[i] = 0; dinv[i] = 0; continue; }
+          rhs[i] = F[i];
+          let d = nf[i] * kf;
+          if (c < cols - 1 && nlh[i] && alive[i + 1]) d += nlh[i] * kl;
+          if (c > 0 && nlh[i - 1] && alive[i - 1]) d += nlh[i - 1] * kl;
+          if (r < rows - 1 && nlv[i] && alive[i + cols]) d += nlv[i] * kl;
+          if (r > 0 && nlv[i - cols] && alive[i - cols]) d += nlv[i - cols] * kl;
+          dinv[i] = d > 0 ? 1 / d : 0;
+        }
+      }
+      work += n * (1 + lockCG(n, A, dinv, rhs, x, Math.min(8000, 10 * n + 50), tol2rel, wk));
+    };
+    // cabinets that no longer have any path to the frame come off
+    const groundCheck = () => {
+      const seen = new Uint8Array(n), stack = [];
+      for (let i = 0; i < n; i++) if (alive[i] && nf[i] > 0) { seen[i] = 1; stack.push(i); }
+      while (stack.length) {
+        const i = stack.pop(), r = Math.floor(i / cols), c = i - r * cols;
+        const go = (j) => { if (alive[j] && !seen[j]) { seen[j] = 1; stack.push(j); } };
+        if (c < cols - 1 && nlh[i]) go(i + 1);
+        if (c > 0 && nlh[i - 1]) go(i - 1);
+        if (r < rows - 1 && nlv[i]) go(i + cols);
+        if (r > 0 && nlv[i - cols]) go(i - cols);
+      }
+      const gone = [];
+      for (let i = 0; i < n; i++) if (alive[i] && !seen[i]) { alive[i] = 0; x[i] = 0; gone.push(i); }
+      return gone;
+    };
+    // the largest load / strength over all fixings and locks that can still break
+    const worst = () => {
+      let best = 0;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const i = r * cols + c; if (!alive[i]) continue;
+          if (Tf > 0 && nf[i] > 0) best = Math.max(best, kf * Math.abs(x[i]) / Tf);
+          if (Tl > 0) {
+            if (c < cols - 1 && nlh[i] && alive[i + 1]) best = Math.max(best, kl * Math.abs(x[i] - x[i + 1]) / Tl);
+            if (r < rows - 1 && nlv[i] && alive[i + cols]) best = Math.max(best, kl * Math.abs(x[i] - x[i + cols]) / Tl);
+          }
+        }
+      }
+      return best;
+    };
+
+    solve(1e-26);                                                    // the whole wall, before anything lets go
+    const fixF = new Float64Array(n), lockH = new Float64Array(n), lockV = new Float64Array(n);
+    let peakFix = 0, peakLock = 0, fixAt = -1, lockAt = -1;
+    for (let r = rows - 1; r >= 0; r--) {                            // top row first, so a tie is called for the top left
+      for (let c = 0; c < cols; c++) {
+        const i = r * cols + c;
+        fixF[i] = kf * Math.abs(x[i]);
+        if (c < cols - 1 && nlh[i]) lockH[i] = kl * Math.abs(x[i] - x[i + 1]);
+        if (r < rows - 1 && nlv[i]) lockV[i] = kl * Math.abs(x[i] - x[i + cols]);
+        if (fixF[i] > peakFix * (1 + 1e-9)) { peakFix = fixF[i]; fixAt = i; }
+        const lk = Math.max(lockH[i], lockV[i]);
+        if (lk > peakLock * (1 + 1e-9)) { peakLock = lk; lockAt = i; }
+      }
+    }
+    const x1 = Float64Array.from(x);
+    let reaction = 0; for (let i = 0; i < n; i++) reaction += nf[i] * kf * x[i];
+
+    const events = []; let lam = 0, lostTotal = 0, truncated = false;
+    if (Tf > 0 || Tl > 0) {
+      for (let iter = 0; iter < LOCK_EVENTS_MAX; iter++) {
+        if (iter > 0) solve(1e-20);
+        const best = worst();
+        if (!(best > 1e-12)) break;
+        const lamFail = Math.max(lam, 1 / best);
+        if (lamFail > LOCK_LAM_FAR) break;
+        if (events.length && lamFail > lamStop) break;
+        if (events.length && work > workMax) { truncated = true; break; }
+        const thr = best * (1 - 1e-9), picks = [];
+        for (let r = rows - 1; r >= 0; r--) {                        // everything within rounding of the worst goes together; top left is named first
+          for (let c = 0; c < cols; c++) {
+            const i = r * cols + c; if (!alive[i]) continue;
+            if (Tf > 0 && nf[i] > 0 && kf * Math.abs(x[i]) / Tf >= thr) picks.push([0, i]);
+            if (Tl > 0) {
+              if (c < cols - 1 && nlh[i] && alive[i + 1] && kl * Math.abs(x[i] - x[i + 1]) / Tl >= thr) picks.push([1, i]);
+              if (r < rows - 1 && nlv[i] && alive[i + cols] && kl * Math.abs(x[i] - x[i + cols]) / Tl >= thr) picks.push([2, i]);
+            }
+          }
+        }
+        const kinds = { fix: 0, lockH: 0, lockV: 0 }, hit = new Set();
+        let cut = false;                                             // did a fixing or a joint run out, so a cabinet may have lost its path to the frame?
+        for (const [k, i] of picks) {
+          if (k === 0) { if (--nf[i] === 0) cut = true; kinds.fix++; hit.add(i); }
+          else if (k === 1) { if (--nlh[i] === 0) cut = true; kinds.lockH++; hit.add(i); hit.add(i + 1); }
+          else { if (--nlv[i] === 0) cut = true; kinds.lockV++; hit.add(i); hit.add(i + cols); }
+        }
+        const lost = cut ? groundCheck() : []; lostTotal += lost.length; lam = lamFail;
+        events.push({ lam: lamFail, n: picks.length, kinds, hit: Array.from(hit), lost, lostTotal, rep: { kind: picks[0][0], i: picks[0][1] } });
+        if (lostTotal >= n) break;
+      }
+    }
+    const lostAt = (lf) => { let c = 0; for (const e of events) { if (e.lam <= lf * (1 + 1e-9)) c = e.lostTotal; else break; } return c; };
+    return { cols, rows, n, x: x1, fixF, lockH, lockV, peakFix, peakLock, fixAt, lockAt, reaction, load: F.reduce((s, v) => s + v, 0),
+      events, lamFirst: events.length ? events[0].lam : Infinity, lostAt, truncated, kf, kl, Tf, Tl, fixN, lockN };
+  }
+
+  /* The cabinet loads of the load in play, and the lock network under them. Wind (outdoors, a draught, a door gust) is a pressure on every cabinet,
+     stronger up the height outdoors and by `edge` on the top and side edges; a shake is the cabinet's own weight times the acceleration; a knock is one
+     push on one cabinet. Only a load that pulls the cabinets off their frame is checked: wind from the front, or a push from the front, presses them
+     onto it. Returns null when the check is off. */
+  function locksFor(S, D) {
+    const lk = S.locks; if (!lk || !lk.on || !D) return null;
+    const cols = D.cols, rows = D.rows, n = cols * rows, cabH = D.cabH, area = CAB.w * cabH, y0 = SHEET.screenBottom, hs = D.geom.hs;
+    const kind = D.loadKind, cs = D.loadCase;
+    const alpha = S.mode === 'outdoor' ? (PROFILE_ALPHA[S.profile] || 0) : 0;
+    const psi = (zAbs) => (alpha ? Math.pow(Math.max(zAbs, 3) / 10, 2 * alpha) : 1);
+    const edge = clamp(+lk.edge || 1, 1, 4), fixN = clamp(Math.round(lk.fixN) || 1, 1, 16), lockN = clamp(Math.round(lk.lockN) || 0, 0, 16);
+    const out = { on: true, kind, cs, cols, rows, n, cabH, area, fixN, lockN, edge, stiff: lk.stiff > 0 ? lk.stiff : 1, TfKgf: Math.max(0, +lk.fixKgf || 0), TlKgf: Math.max(0, +lk.lockKgf || 0) };
+    out.entered = out.TfKgf > 0 || out.TlKgf > 0;
+    out.active = kind === 'wind' ? D.dir === 'rear' : kind === 'force' ? S.knock.from !== 'front' : true;
+    out.why = out.active ? '' : kind === 'wind' ? 'Wind from the front presses the cabinets onto the frame, so their locks are not pulled.' : 'A push from the front presses the cabinet onto the frame, so its locks are not pulled.';
+    const F = new Float64Array(n);
+    let ld = null, knockAt = -1;
+    if (out.active) {
+      if (kind === 'wind') {
+        const pBase = D.wind.qPeak * D.wind.cn * S.Cf;
+        for (let r = 0; r < rows; r++) {
+          const p = pBase * psi(hs + y0 + (r + 0.5) * cabH);
+          for (let c = 0; c < cols; c++) F[r * cols + c] = p * area * (1 + (edge - 1) * ((r === rows - 1 ? 1 : 0) + (c === 0 ? 1 : 0) + (c === cols - 1 ? 1 : 0)));
+        }
+      } else if (kind === 'accel') {
+        ld = loadFor(S, cs, 'rear'); F.fill(S.kgm2 * area * ld.acc);
+      } else {
+        const row = clamp(Math.floor((S.knock.h - y0) / cabH), 0, rows - 1); knockAt = row * cols + Math.floor(cols / 2);
+        F[knockAt] = Math.max(0, S.knock.kgf) * G;
+      }
+    }
+    out.knockAt = knockAt;
+    const net = lockNet({ cols, rows, F, fixN, lockN, kl: out.stiff, Tf: out.TfKgf * G, Tl: out.TlKgf * G, lamStop: Math.max(S.SF, 1) * (1 + 1e-9) });
+    const kgf = (v) => v / G, f32 = (a) => Float32Array.from(a, kgf);
+    out.net = net;
+    out.load = { total: kgf(net.load), max: kgf(Math.max(0, ...F)), mean: n ? kgf(net.load / n) : 0 };
+    out.F = f32(F); out.fixF = f32(net.fixF); out.lockH = f32(net.lockH); out.lockV = f32(net.lockV);
+    out.peak = { fix: kgf(net.peakFix), lock: kgf(net.peakLock), fixAt: net.fixAt, lockAt: net.lockAt };
+    out.need = { fix: out.peak.fix * S.SF, lock: out.peak.lock * S.SF };
+    out.events = net.events; out.lamFirst = net.lamFirst; out.truncated = net.truncated;
+    out.sig = [kind, cs, out.active, n, out.TfKgf, out.TlKgf, fixN, lockN, edge, out.stiff, net.load.toFixed(4), isFinite(net.lamFirst) ? net.lamFirst.toFixed(6) : '-', net.events.length].join('|');
+    out.lostAt1 = net.lostAt(1); out.lostAtSF = net.lostAt(S.SF);
+    // one failure drags the next along within a hair of the same load, so the failures that come within 3% of each other are shown as one step
+    out.groups = [];
+    net.events.forEach((e, k) => {
+      const g = out.groups[out.groups.length - 1];
+      if (g && e.lam <= g.lam * 1.03) { g.last = k; g.n += e.n; g.fix += e.kinds.fix; g.lock += e.kinds.lockH + e.kinds.lockV; for (const i of e.hit) g.hitSet.add(i); for (const i of e.lost) g.lost.push(i); g.lostTotal = e.lostTotal; }
+      else out.groups.push({ first: k, last: k, lam: e.lam, n: e.n, fix: e.kinds.fix, lock: e.kinds.lockH + e.kinds.lockV, hitSet: new Set(e.hit), lost: e.lost.slice(), lostTotal: e.lostTotal, rep: e.rep });
+    });
+    for (const g of out.groups) { g.hit = Array.from(g.hitSet); delete g.hitSet; }
+    // how hard each cabinet's own fixings and the joints around it are worked: against the strengths you typed, else against the busiest element
+    const use = new Float32Array(n), ref = Math.max(out.peak.fix, out.peak.lock, 1e-12);
+    const fixU = (v) => (!out.entered ? v / ref : out.TfKgf > 0 ? v / out.TfKgf : 0), lockU = (v) => (!out.entered ? v / ref : out.TlKgf > 0 ? v / out.TlKgf : 0);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const i = r * cols + c;
+        let u = fixU(out.fixF[i]);
+        for (const v of [out.lockH[i], c > 0 ? out.lockH[i - 1] : 0, out.lockV[i], r > 0 ? out.lockV[i - cols] : 0]) u = Math.max(u, lockU(v));
+        use[i] = u;
+      }
+    }
+    out.use = use; out.useKind = out.entered ? 'strength' : 'relative';
+    out.status = !out.active ? 'inactive' : !out.entered ? 'none' : out.lamFirst < 1 - 1e-9 ? 'fail' : out.lamFirst < S.SF - 1e-9 ? 'marginal' : 'ok';
+    out.unit = kind === 'wind' ? { v: D.wind.vPeak } : kind === 'accel' ? { g: out.active ? ld.acc / G : 0 } : { kgf: S.knock.kgf };      // what a load factor of 1 is
+    // the load at which the first lock lets go, in the units of the load in play
+    if (isFinite(out.lamFirst) && out.active) {
+      if (kind === 'wind') { const v = D.wind.vPeak * Math.sqrt(out.lamFirst); out.limit = { kind: 'speed', v, bft: beaufort(v) }; }
+      else if (kind === 'accel') out.limit = { kind: 'accel', g: out.lamFirst * ld.acc / G };
+      else out.limit = { kind: 'force', kgf: out.lamFirst * S.knock.kgf };
+    } else out.limit = null;
+    return out;
+  }
+
   /* ---- how each load changes in time: all deterministic, so a replay looks the same ---- */
   const smoothstep = (x) => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
   // a pulse that repeats: starts at t0, rises, holds, falls, then rests before the next one
@@ -1653,9 +1976,31 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
     }
     reset() {
       this.t = 0; this.phi = 0; this.omega = 0; this.toppled = false; this.toppledAt = -1; this.maxPhi = 0; this.impactAt = -1; this.lastU = 0; this.lam = 0; this.lamB = 0; this.Ph = 0; this.broken = false;
+      this.resetLocks();
       this.side = this.dirSign || 1;                       // +1 tilting forward about the front toe, -1 backward about the rear toe
       this.pushDir = this.dirSign || 1;
       this.ground = 0;                                     // how far the floor is displaced, -1..1 of its peak
+    }
+    /* The cabinet locks (see locksFor): when the load on the wall has reached the next lock's limit, that lock lets go, and any cabinet left with no hold
+       on the frame comes off. The load only has to have been that high once, so it is the highest load so far that counts. */
+    setLocks(L) {
+      const lk = L && L.active && L.events && L.events.length ? L : null, sig = lk ? lk.sig : '';
+      if (sig !== this.lkSig) { this.lkSig = sig; this.lk = lk; this.resetLocks(); } else this.lk = lk;
+    }
+    resetLocks() {
+      this.lkI = 0; this.lamPeak = 0; this.lkCount = 0; this.lkLastAt = -1;
+      const n = this.lk ? this.lk.n : 0;
+      this.lkLost = n ? new Uint8Array(n) : null; this.lkHit = n ? new Uint8Array(n) : null; this.lkLostAt = n ? new Float32Array(n).fill(-1) : null;
+    }
+    lockStep() {
+      const L = this.lk; if (!L || this.toppled || !this.lkLost) return;
+      const a = Math.abs(this.lam); if (a > this.lamPeak) this.lamPeak = a;
+      while (this.lkI < L.events.length && this.lamPeak >= L.events[this.lkI].lam * (1 - 1e-12)) {
+        const ev = L.events[this.lkI++];
+        for (const i of ev.hit) this.lkHit[i] = 1;
+        for (const i of ev.lost) { this.lkLost[i] = 1; this.lkLostAt[i] = this.t; this.lkCount++; }
+        this.lkLastAt = this.t;
+      }
     }
     ramp(t) { const x = clamp(t / 1.5, 0, 1); return x * x * (3 - 2 * x); }
     windU(t) { const m = 1 + this.gust * gustN(t * 0.9 + 3); return this.ramp(t) * m / (1 + this.gust); }
@@ -1689,7 +2034,7 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
         default: { const u = this.windU(t); return { u, lam: u * u, gs: 1, g: 0 }; }
       }
     }
-    step(dt) { if (this.shake) this.stepShake(dt); else this.stepOne(dt); }
+    step(dt) { if (this.shake) this.stepShake(dt); else this.stepOne(dt); this.lockStep(); }
     stepOne(dt) {                                          // wind, a door gust or a push from one side: tips one way, about one toe
       const R = this.rig; if (!R) return;
       this.t += dt;
@@ -1770,7 +2115,7 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
     liftMM(depth) { return Math.sin(this.phi) * depth * 1000; }
   }
 
-  return { G, CAB, SHEET, SCALE, CABINETS, cabArea, cabHeight, RESTRAINT, PROFILE_ALPHA, MAX_BALLAST, SF_CAP, BFT_NAME, BFT_SPEED, bftRange, CASES, CASE_KIND, CASE_NAME, QUAKE_ZONES, beaufort, defaults, derive, compareCases, loadFor, makeRecord, gustN, Sim, sheetBases, clamp, windInfo, scanSys, lamAt };
+  return { G, CAB, SHEET, SCALE, CABINETS, cabArea, cabHeight, RESTRAINT, PROFILE_ALPHA, MAX_BALLAST, SF_CAP, BFT_NAME, BFT_SPEED, bftRange, CASES, CASE_KIND, CASE_NAME, QUAKE_ZONES, beaufort, defaults, derive, compareCases, loadFor, lockNet, locksFor, makeRecord, gustN, Sim, sheetBases, clamp, windInfo, scanSys, lamAt };
 });
 
 (function () {
@@ -2674,10 +3019,13 @@ function drawFront(canvas, st) {
   const cols = D.cols, rows = D.rows, tt = t * 0.5;
   const hue = (uu, vv) => 220 + 48 * Math.sin(uu * 5.2 + tt * 1.3) + 36 * Math.cos(vv * 6.1 - tt) + 22 * Math.sin((uu + vv) * 9 + tt * 2.1);
   const hsl = (hh, ss, ll) => 'hsl(' + ((Math.round(hh) % 360) + 360) % 360 + ',' + ss + '%,' + clamp(ll, 4, 92).toFixed(0) + '%)';
+  const lkOn = !!(sim.lk && sim.lkLost && sim.lk.n === rows * cols);               // cabinets that have let go of the frame
+  const falling = [];
   for (let r = 0; r < rows; r++) {
     const ya = y0 + r * cabH, yb = ya + cabH, vb = r / rows, vt = (r + 1) / rows;
     for (let c = 0; c < cols; c++) {
       const xa = -W / 2 + c * CAB_W2, xb = xa + CAB_W2;
+      if (lkOn && sim.lkLost[r * cols + c]) { const ts = sim.t - sim.lkLostAt[r * cols + c]; if (ts >= 0 && ts < 1.6) falling.push({ xa, xb, ya, yb, ts, uc: (c + 0.5) / cols, vm: (vb + vt) / 2 }); continue; }
       const q00 = wallPt(xa, ya, 0), q10 = wallPt(xb, ya, 0), q11 = wallPt(xb, yb, 0), q01 = wallPt(xa, yb, 0);
       if (!faceVisible(q00, q10, q01)) continue;
       const n = v3norm(v3cross(v3sub(q10, q00), v3sub(q01, q00)));
@@ -2690,7 +3038,14 @@ function drawFront(canvas, st) {
       ctx.fillStyle = gr; ctx.beginPath(); ctx.moveTo(p00[0], p00[1]); ctx.lineTo(p10[0], p10[1]); ctx.lineTo(p11[0], p11[1]); ctx.lineTo(p01[0], p01[1]); ctx.closePath(); ctx.fill();
       if (gloss > 0.01) { ctx.fillStyle = 'rgba(255,255,255,' + gloss.toFixed(3) + ')'; ctx.fill(); }
       ctx.strokeStyle = 'rgba(6,10,16,.55)'; ctx.lineWidth = 0.7; ctx.stroke();
+      if (lkOn && sim.lkHit[r * cols + c]) { ctx.strokeStyle = 'rgba(255,255,255,.95)'; ctx.lineWidth = 1.8; ctx.stroke(); }          // lost a lock, still hanging on
     }
+  }
+  for (const f of falling) {                                // a cabinet that has just come off drops and is blown toward the audience, then fades
+    const drop = Math.min(f.ya, 4.9 * f.ts * f.ts * 0.6), drift = 0.9 * f.ts * f.ts + 0.2 * f.ts;
+    const q = [[f.xa, f.ya], [f.xb, f.ya], [f.xb, f.yb], [f.xa, f.yb]].map(([x, y]) => P(wallPt(x, y - drop, drift)));
+    ctx.globalAlpha = clamp(1.2 - f.ts / 1.4, 0, 1); ctx.fillStyle = hsl(hue(f.uc, f.vm), 80, 44); ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); q.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.globalAlpha = 1;
   }
 
   // ---- wind streaks in front of the wall
@@ -3134,16 +3489,75 @@ function drawBend(canvas, st) {
   }
 }
 
+/* ---------------- cabinet locks: the wall seen from the front, each cabinet coloured by how hard its fixings and locks are worked ---------------- */
+const LK_STOPS = [[0, [47, 182, 122]], [0.5, [231, 178, 26]], [0.8, [238, 122, 43]], [1, [208, 59, 59]]];      // against the strength you typed
+function lockColor(u, mode) {
+  u = Math.max(0, u);
+  if (mode === 'relative') return u < 0.5 ? mixRGB([23, 50, 79], [47, 120, 184], u * 2) : mixRGB([47, 120, 184], [143, 208, 255], Math.min(1, (u - 0.5) * 2));
+  for (let k = 1; k < LK_STOPS.length; k++) if (u <= LK_STOPS[k][0]) { const a = LK_STOPS[k - 1], b = LK_STOPS[k]; return mixRGB(a[1], b[1], (u - a[0]) / (b[0] - a[0])); }
+  return mixRGB(LK_STOPS[3][1], LK_STOPS[3][1], 1);
+}
+/* which cabinets have come off, and which have lost a lock but hang on: live from the simulation while it runs, else from the failure order up to a load factor */
+function lockState(st, lamShow) {
+  const L = st.Dlk, n = L.n, lost = new Uint8Array(n), hit = new Uint8Array(n), order = new Int16Array(n).fill(-1);
+  const live = st.ui.run !== 'idle' && st.sim.lk && st.sim.lkLost && st.sim.lk.n === n;
+  if (live) { lost.set(st.sim.lkLost); hit.set(st.sim.lkHit); }
+  L.events.forEach((e, k) => {
+    if (live ? k >= st.sim.lkI : e.lam > lamShow * (1 + 1e-9)) return;
+    if (!live) { for (const i of e.hit) hit[i] = 1; for (const i of e.lost) lost[i] = 1; }
+  });
+  L.groups.forEach((g, k) => { if (k < 9 && (live ? g.first < st.sim.lkI : g.lam <= lamShow * (1 + 1e-9))) for (const i of g.hit.slice(0, 40)) if (order[i] < 0) order[i] = k; });   // the steps, numbered once they have happened
+  return { lost, hit, order, live };
+}
+function drawLockMap(canvas, st, hit) {
+  const { ctx, w, h } = fitCanvas(canvas), L = st.Dlk;
+  ctx.fillStyle = BP.bg; ctx.fillRect(0, 0, w, h);
+  if (!L) return;
+  const { cols, rows, cabH } = L, padL = 10, padR = 10, padT = 26, padB = 10;
+  const sc = Math.min((w - padL - padR) / (cols * M.CAB.w), (h - padT - padB) / (rows * cabH));
+  const cw = M.CAB.w * sc, ch = cabH * sc, x0 = (w - cw * cols) / 2, y0 = padT + (h - padT - padB - ch * rows) / 2;
+  hit.lock = { x0, y0, cw, ch, cols, rows };
+  const lamShow = st.ui.lkLam === 'sf' ? st.S.SF : 1, ls = lockState(st, lamShow), strength = L.useKind === 'strength';
+  const gap = cw >= 9 ? 1 : 0;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c, x = x0 + c * cw, y = y0 + (rows - 1 - r) * ch;
+      if (ls.lost[i]) {                                       // came off: an empty place in the wall
+        ctx.fillStyle = '#080d14'; ctx.fillRect(x + gap, y + gap, cw - gap, ch - gap);
+        if (cw >= 10) { ctx.strokeStyle = 'rgba(208,59,59,.75)'; ctx.lineWidth = 1.4; line(ctx, x + cw * 0.28, y + ch * 0.28, x + cw * 0.72, y + ch * 0.72); line(ctx, x + cw * 0.72, y + ch * 0.28, x + cw * 0.28, y + ch * 0.72); }
+        continue;
+      }
+      ctx.fillStyle = lockColor(strength ? L.use[i] : Math.min(1, L.use[i]), strength ? 'strength' : 'relative'); ctx.fillRect(x + gap, y + gap, cw - gap, ch - gap);
+      if (ls.hit[i]) { ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.4, Math.min(2.4, cw * 0.1)); ctx.strokeRect(x + gap + 1, y + gap + 1, cw - gap - 2, ch - gap - 2); }
+    }
+  }
+  if (cw >= 15 && ch >= 15) {                                 // the order in which they let go
+    for (let i = 0; i < L.n; i++) {
+      const k = ls.order[i]; if (k < 0) continue;
+      const r = Math.floor(i / cols), c = i - r * cols;
+      txt(ctx, String(k + 1), x0 + (c + 0.5) * cw, y0 + (rows - 1 - r + 0.5) * ch + 4, { font: '700 ' + Math.min(13, Math.max(10, cw * 0.55)) + 'px ' + F.mono, align: 'center', color: '#fff', halo: 'rgba(8,13,20,.85)', haloW: 3 });
+    }
+  }
+  const hv = hit.lockHover;
+  if (hv != null && hv >= 0 && hv < L.n) {
+    const r = Math.floor(hv / cols), c = hv - r * cols;
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.strokeRect(x0 + c * cw + 1, y0 + (rows - 1 - r) * ch + 1, cw - 2, ch - 2);
+  }
+  ctx.strokeStyle = BP.edge; ctx.lineWidth = 1; ctx.strokeRect(x0 - 0.5, y0 - 0.5, cw * cols + 1, ch * rows + 1);
+  txt(ctx, 'top', x0, y0 - 8, { font: '500 10.5px ' + F.mono, color: BP.text });
+  if (ls.live) txt(ctx, w < 440 ? 'live' : 'live: what has come off so far', x0 + 40, y0 - 8, { font: '600 10.5px ' + F.mono, color: '#ffd24a' });
+}
+
 /* ===== app.js (v2) : state, controls, text, pointer interaction, animation loop ===== */
 const $ = (id) => document.getElementById(id);
 const S = M.defaults();
 const sim = new M.Sim();
-const ui = { selected: -1, speed: 1, paused: false, run: 'idle', result: null, tab: 'wall', rtab: 'summary', showInset: true, dragTop: 0, exag: 'auto', cam: 'three', camAz: CAM_PRESETS.three.az, camEl: CAM_PRESETS.three.el, camTAz: CAM_PRESETS.three.az, camTEl: CAM_PRESETS.three.el };
+const ui = { selected: -1, speed: 1, paused: false, run: 'idle', result: null, tab: 'wall', rtab: 'summary', lkLam: '1', showInset: true, dragTop: 0, exag: 'auto', cam: 'three', camAz: CAM_PRESETS.three.az, camEl: CAM_PRESETS.three.el, camTAz: CAM_PRESETS.three.az, camTEl: CAM_PRESETS.three.el };
 const hits = { rear: null, plan: null, map: null, hoverV: null };
 const st = { S, sim, ui, D: null, V: null, t: 0 };
 const SUB = 1 / 240;
-let D = null, sig = '';
-let dirty = { rear: true, map: true, bend: true };
+let D = null, Dlk = null, sig = '', lkKey = '';
+let dirty = { rear: true, map: true, bend: true, lock: true };
 
 const BAL_MAX = () => (S.mode === 'indoor' ? (S.indoorCase === 'quake' ? 1500 : S.indoorCase === 'door' ? 300 : 200) : 1500);
 const roundBallast = (kg) => (kg < 20 ? Math.round(kg * 10) / 10 : kg < 200 ? Math.round(kg * 2) / 2 : Math.round(kg));
@@ -3187,6 +3601,9 @@ function normalize() {
   const R = S.rest, cols = Math.max(1, Math.round(S.W / M.CAB.w));
   R.n = clamp(Math.round(R.n || 0), 0, 60); R.a = Math.max(0, R.a || 0); R.d = Math.max(0, R.d || 0);
   R.wll = clamp(R.wll, 50, 50000); R.slack = clamp(R.slack, 0, 2000); R.anchorKg = clamp(R.anchorKg, 0, 10000);
+  const lk = S.locks;
+  lk.on = !!lk.on; lk.fixKgf = clamp(+lk.fixKgf || 0, 0, 20000); lk.lockKgf = clamp(+lk.lockKgf || 0, 0, 20000);
+  lk.fixN = clamp(Math.round(lk.fixN) || 1, 1, 16); lk.lockN = clamp(Math.round(lk.lockN) || 0, 0, 16); lk.edge = clamp(+lk.edge || 1, 1, 4); lk.stiff = clamp(+lk.stiff || 1, 0.1, 10);
   if (S.autoN) S.N = M.sheetBases(S);
   S.N = clamp(Math.round(S.N), 1, cols);
   if (!S.ballastAuto && (!S.ballast || S.ballast.length !== S.N)) {
@@ -3199,14 +3616,15 @@ function physSig() {
   const sp = r.strap ? [r.strap.c0.toFixed(1), r.strap.dp1.toExponential(4), r.strap.gp, r.strap.PhCap.toFixed(0), r.strap.aPiv.toFixed(3), r.strap.xiAtt.toFixed(3)].join(',') : '-';
   const bs = r.bendStrap ? [r.bendStrap.c0.toFixed(1), r.bendStrap.dp1.toExponential(4)].join(',') : '-';
   const ld = S.mode === 'indoor' ? [D.loadCase, S.door.v, S.door.dur, S.knock.kgf, S.knock.h, S.knock.from, S.knock.dur, S.knock.share, S.sway.amp, S.sway.f, S.sway.bounce, S.quake.pga, S.quake.floor, S.quake.dur, S.notional.pct].join(',') : '';
-  return [f(r.m), f(r.x), f(r.y), r.FN === undefined ? r.F.toFixed(2) : r.FN, r.hc.toFixed(4), D.dir, S.mode === 'outdoor' ? S.gust : 0, D.wind.cn.toFixed(4), sp, bs, r.gov, ld].join('|');
+  return [f(r.m), f(r.x), f(r.y), r.FN === undefined ? r.F.toFixed(2) : r.FN, r.hc.toFixed(4), D.dir, S.mode === 'outdoor' ? S.gust : 0, D.wind.cn.toFixed(4), sp, bs, r.gov, ld, Dlk ? Dlk.sig : ''].join('|');
 }
 function update() {
   normalize();
   D = M.derive(S);
   st.D = D;
+  Dlk = M.locksFor(S, D); st.Dlk = Dlk; dirty.lock = true;
   const s2 = physSig();
-  sim.setRig(D, S);
+  sim.setRig(D, S); sim.setLocks(Dlk);
   if (s2 !== sig) {                                    // the wall or the load changed: the run starts over and the last result is forgotten
     sig = s2; sim.reset(); ui.result = null;
     if (ui.run === 'finished') ui.run = 'idle';
@@ -3293,7 +3711,7 @@ function newWall() {                               // a fresh wall; the last one
   toast('New wall: everything is back to the starting values.', true);
 }
 const EXAMPLE_NAMES = { sheet: 'Sheet wall', noballast: 'No ballast', draft: 'Strong draught', front: 'Front draught', door: 'Door gust', knock: 'Knock', wobble: 'Stage wobble', quake: 'Earthquake',
-  breeze: 'Outdoor breeze', gale: 'Outdoor gale', stage: 'On a stage', straps: 'Top straps' };
+  weaklock: 'Weak locks', breeze: 'Outdoor breeze', gale: 'Outdoor gale', stage: 'On a stage', straps: 'Top straps' };
 function applyExample(name, quiet) {               // an example is a whole wall: it replaces every setting (Undo brings yours back)
   if (!quiet) undoSnap = clone(S);
   setState(null); ui.selected = -1; fillCabModels();
@@ -3308,6 +3726,10 @@ function applyExample(name, quiet) {               // an example is a whole wall
     S.stage.on = true; S.stage.h = 1.2; S.stage.depth = 6; S.stage.front = 4.6;
   }
   if (name === 'quake') { S.indoorCase = 'quake'; S.quake = { pga: 0.24, floor: 1, dur: 12 }; sheetBallast(); }
+  if (name === 'weaklock') {
+    S.indoorCase = 'knock'; S.knock = { kgf: 60, h: 1.2, from: 'rear', dur: 0.3, share: 2 }; S.ballastAuto = false; S.ballastPer = 9.055; S.ballast = null;
+    S.locks = Object.assign(S.locks, { on: true, fixKgf: 6, fixN: 2, lockKgf: 6, lockN: 2, edge: 1.5, stiff: 1 });
+  }
   if (name === 'breeze') { S.mode = 'outdoor'; S.outSpeed = 8; S.gust = 0.3; }
   if (name === 'gale') { S.mode = 'outdoor'; S.outSpeed = 14; S.gust = 0.4; S.ballastAuto = false; S.ballastPer = 300; S.ballast = null; }
   if (name === 'stage') { S.mode = 'outdoor'; S.outSpeed = 8; S.gust = 0.3; S.stage.on = true; S.stage.h = 1.6; S.stage.depth = 6; S.stage.front = 4.6; }
@@ -3337,9 +3759,9 @@ function syncRunUI() {
   const res = $('vsRes'), r = fin ? ui.result : null;                      // what the run came to, in the strip under the view (it never covers the wall)
   res.hidden = !r;
   if (r) {
-    res.dataset.s = r.kind;
-    res.querySelector('use').setAttribute('href', r.kind === 'held' ? '#i-check' : '#i-x');
-    setText('vsResK', r.kind === 'held' ? 'Held' : 'Toppled'); setText('vsResT', r.text);
+    res.dataset.s = r.kind === 'lost' ? 'warn' : r.kind;
+    res.querySelector('use').setAttribute('href', r.kind === 'held' ? '#i-check' : r.kind === 'lost' ? '#i-warn' : '#i-x');
+    setText('vsResK', r.kind === 'held' ? 'Held' : r.kind === 'lost' ? 'Cabinets off' : 'Toppled'); setText('vsResT', r.text);
   }
   $('btnStart3').querySelector('span').textContent = idle ? 'Start simulation' : 'Restart simulation';
 }
@@ -3349,12 +3771,13 @@ function pauseSim() { if (ui.run === 'running') ui.run = 'paused'; else if (ui.r
 function finishRun(r) { ui.result = r; ui.run = 'finished'; syncRunUI(); }
 function checkFinish() {                           // a toppled wall ends the run; so does a one-off load (gust, knock, earthquake) once the wall has settled
   if (ui.run !== 'running' || ui.result) return;
-  if (sim.toppled && sim.phi > 1.2) { finishRun({ kind: 'toppled', text: 'The wall toppled after ' + nf1(sim.toppledAt) + ' s.' }); return; }
+  const off = sim.lk && sim.lkLost ? sim.lkCount : 0, offTxt = off ? lockPlural(off, 'cabinet', 'cabinets') : '';
+  if (sim.toppled && sim.phi > 1.2) { finishRun({ kind: 'toppled', text: 'The wall toppled after ' + nf1(sim.toppledAt) + ' s.' + (off ? ' ' + offTxt + ' had come off before that.' : '') }); return; }
   const done = sim.doneAt;
   if (done !== null && !sim.toppled && sim.t > done + 3.5) {
     const lean = sim.maxPhi * 180 / Math.PI, lift = Math.sin(sim.maxPhi) * D.geom.depth * 1000;
     const brief = D.status === 'tipping' ? ' It held only because the load was brief.' : '';          // the safety factor above treats the load as lasting
-    finishRun({ kind: 'held', text: (sim.maxPhi < 2e-4 ? 'It did not even lift.' : 'Leaned at most ' + nf(lean, lean < 10 ? 1 : 0) + '°, the base lifted ' + nf(lift, lift < 100 ? 1 : 0) + ' mm.') + brief });
+    finishRun({ kind: off ? 'lost' : 'held', text: (off ? 'The wall held, but ' + offTxt + (off === 1 ? ' came' : ' came') + ' off. ' : '') + (sim.maxPhi < 2e-4 ? 'It did not even lift.' : 'Leaned at most ' + nf(lean, lean < 0.1 ? 2 : lean < 10 ? 1 : 0) + '°, the base lifted ' + nf(lift, lift < 100 ? 1 : 0) + ' mm.') + brief });
   }
 }
 
@@ -3401,6 +3824,101 @@ function initKeys() {                              // Space starts or pauses, Es
     if (e.key === ' ') { e.preventDefault(); if (ui.run === 'idle') startSim(); else if (ui.run === 'finished') startSim(); else pauseSim(); }
     else if (e.key === 'Escape' && ui.run !== 'idle') endSim();
   });
+}
+
+/* ------------------------------------------------------------------ cabinet locks */
+const LK_LN = Math.log(1 + 20000);
+const kgfToPos = (kgf) => 1000 * Math.log(1 + Math.max(0, kgf)) / LK_LN;
+const posToKgf = (pos) => { const v = Math.expm1(pos / 1000 * LK_LN); return v < 10 ? Math.round(v * 10) / 10 : v < 100 ? Math.round(v) : Math.round(v / 5) * 5; };       // neat numbers off the slider
+const fmtKgf = (v) => (v <= 0 ? '0' : String(+(+v).toFixed(v < 10 ? 1 : 0)));
+const lockWhat = (L) => (L.kind === 'wind' ? 'wind' : L.kind === 'accel' ? 'shaking' : 'push');
+function cabName(L, i) {
+  const r = Math.floor(i / L.cols), c = i - r * L.cols;
+  const rowTxt = L.rows === 1 ? 'the only row' : r === L.rows - 1 ? 'top row' : r === 0 ? 'bottom row' : 'row ' + (r + 1) + ' from the bottom';
+  const colTxt = L.cols === 1 ? '' : c === 0 ? ', far left' : c === L.cols - 1 ? ', far right' : ', column ' + (c + 1) + ' from the left';
+  return rowTxt + colTxt;
+}
+function lockAtText(L, lam) {                                // the load at a load factor, in the units of the load in play
+  if (L.kind === 'wind') { const v = L.unit.v * Math.sqrt(lam); return nf1(v) + ' m/s, Beaufort ' + M.beaufort(v); }
+  if (L.kind === 'accel') return nf2(L.unit.g * lam) + ' g';
+  return nf0(L.unit.kgf * lam) + ' kgf';
+}
+const lockPlural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+function lockSentence(L) {                                   // what the check comes to, as one paragraph
+  const what = lockWhat(L), sf = nf2(S.SF), first = L.events[0], g0 = L.groups[0];
+  const cabs = (n) => (n === 1 && !L.truncated ? '1 cabinet comes' : lockPlural(n, 'cabinet', 'cabinets') + (L.truncated ? ' or more' : '') + ' come') + ' off';
+  if (!L.active) return L.why;
+  if (!L.entered) return 'At your ' + what + ' a cabinet carries ' + nf1(L.load.mean) + ' kgf' + (L.load.max > L.load.mean * 1.02 ? ' (up to ' + nf1(L.load.max) + ' kgf at the corners)' : '') + ' and the busiest frame fixing holds ' + nf2(L.peak.fix) + ' kgf. To keep your ' + sf + '× margin the fixings must be rated for at least ' + nf2(L.need.fix) + ' kgf and the cabinet locks for at least ' + nf2(L.need.lock) + ' kgf. Type the strength of your locks to see which one lets go first.';
+  if (!first) return 'Nothing lets go: the locks you entered are never loaded past their strength here.';
+  const where = cabName(L, g0.rep.i) + ' (' + (g0.rep.kind === 0 ? 'a frame fixing' : 'a cabinet lock') + ')';
+  const hang = (L.truncated ? 'So far every' : 'Every') + ' cabinet still hangs on, held by its neighbours.';
+  const more = L.truncated ? ' The calculation stops after ' + L.events.length + ' failures but the failure runs on, so the real number is higher.' : '';
+  if (L.status === 'ok') return 'With your locks nothing lets go at your ' + what + ', or with your margin of ' + sf + '×. The first lock goes at ' + nf1(L.lamFirst) + '× your ' + what + ' (' + lockAtText(L, L.lamFirst) + '): ' + where + '.';
+  if (L.status === 'marginal') return 'Nothing lets go at your ' + what + ', but inside your margin of ' + sf + '× the first lock goes, at ' + nf2(L.lamFirst) + '× (' + lockAtText(L, L.lamFirst) + '): ' + where + '. ' + (L.lostAtSF > 0 ? cabs(L.lostAtSF) + ' by ' + sf + '×.' : hang) + more;
+  return 'At your ' + what + ' the first lock lets go: ' + where + '. ' + (L.lostAt1 > 0 ? cabs(L.lostAt1) + '.' : hang) + (L.lostAt1 < L.lostAtSF ? ' With your margin of ' + sf + '×, ' + cabs(L.lostAtSF) + '.' : '') + more;
+}
+function renderLockStrip() {                                 // one line in the strip under the picture, and the chip on the picture
+  const L = Dlk, row = $('vsLk'), lost = L && sim.lk && sim.lkLost ? sim.lkCount : 0, live = ui.run !== 'idle' && lost > 0;
+  $('lkPill').hidden = !(ui.run !== 'idle' && lost > 0);
+  if (lost > 0) setText('lkPillText', lockPlural(lost, 'cabinet off', 'cabinets off'));
+  if (!L || !L.active || (!L.entered && !live) || (ui.run === 'finished' && ui.result && ui.result.kind === 'lost')) { row.hidden = true; return; }       // the result row already says it
+  let sx, t;
+  if (live) { sx = 'toppled'; t = lockPlural(lost, 'cabinet has', 'cabinets have') + ' come off'; }
+  else if (L.status === 'ok') { sx = 'held'; t = 'nothing comes off' + (isFinite(L.lamFirst) ? '. The first lock goes at ' + nf1(L.lamFirst) + '× your ' + lockWhat(L) : ''); }
+  else if (L.status === 'marginal') { sx = 'warn'; t = 'a lock goes inside your margin, at ' + nf2(L.lamFirst) + '× your ' + lockWhat(L); }
+  else { sx = 'toppled'; t = L.lostAt1 > 0 ? lockPlural(L.lostAt1, 'cabinet comes', 'cabinets come') + ' off at your ' + lockWhat(L) : 'a lock lets go at your ' + lockWhat(L); }
+  row.hidden = false; row.dataset.s = sx; setText('vsLkT', t);
+  $('vsLkIcon').querySelector('use').setAttribute('href', sx === 'held' ? '#i-check' : sx === 'warn' ? '#i-warn' : '#i-x');
+}
+function renderLocks() {
+  const L = Dlk;
+  $('lockSec').hidden = !L; $('lockFig').hidden = !L;
+  renderLockStrip();
+  if (!L) return;
+  const sf = nf2(S.SF);
+  setText('lockText', lockSentence(L));
+  setText('lkLoadK', L.kind === 'wind' ? 'Wind on one cabinet' : L.kind === 'accel' ? 'Shaking on one cabinet' : 'Push on the cabinet');
+  setText('lkLoad', nf1(L.kind === 'force' ? L.load.max : L.load.mean) + ' ');
+  $('lkLoad').appendChild(el('small', null, 'kgf'));
+  setText('lkLoadS', !L.active ? 'not pulled off the frame' : L.kind === 'wind' ? (L.load.max > L.load.mean * 1.02 ? 'up to ' + nf1(L.load.max) + ' kgf at the corners' : 'the same on every cabinet') : L.kind === 'accel' ? 'its own weight times the acceleration' : cabName(L, L.knockAt));
+  const tile = (id, v, sub) => { setText(id, nf2(v) + ' '); $(id).appendChild(el('small', null, 'kgf')); setText(id + 'S', sub); };
+  tile('lkFix', L.peak.fix, L.active && L.peak.fix > 0 ? cabName(L, L.peak.fixAt) + (L.TfKgf > 0 ? ' · ' + nf0(L.peak.fix / L.TfKgf * 100) + '% of ' + nf1(L.TfKgf) + ' kgf' : '') : '–');
+  tile('lkLock', L.peak.lock, !L.active || L.peak.fix <= 0 ? '–' : L.peak.lock < 0.01 * L.peak.fix ? 'almost none: the load is even' : cabName(L, L.peak.lockAt) + (L.TlKgf > 0 ? ' · ' + nf0(L.peak.lock / L.TlKgf * 100) + '% of ' + nf1(L.TlKgf) + ' kgf' : ''));
+  tile('lkNeed', L.need.fix, 'for each fixing, and ' + nf2(L.need.lock) + ' kgf for each cabinet lock, at your ' + sf + '× margin');
+  const rows = $('lockRows'); rows.textContent = '';
+  setText('lkThAt', 'At (' + (L.kind === 'wind' ? 'wind' : L.kind === 'accel' ? 'shaking' : 'push') + ')');
+  if (!L.groups.length) { const tr = el('tr'), td = el('td', null, !L.active ? L.why : L.entered ? 'Nothing lets go.' : 'Type the strength of your locks to see the order.'); td.colSpan = 5; tr.appendChild(td); rows.appendChild(tr); }
+  L.groups.slice(0, 24).forEach((g, k) => {
+    const tr = el('tr');
+    const kinds = [g.fix ? lockPlural(g.fix, 'fixing', 'fixings') : '', g.lock ? lockPlural(g.lock, 'cabinet lock', 'cabinet locks') : ''].filter(Boolean).join(' and ');
+    tr.appendChild(el('td', 'lk-n', String(k + 1)));
+    tr.appendChild(el('td', null, cabName(L, g.rep.i) + (g.hit.length > 1 ? ' and ' + lockPlural(g.hit.length - 1, 'other', 'others') : '')));
+    tr.appendChild(el('td', null, kinds));
+    tr.appendChild(el('td', null, nf2(g.lam) + '× (' + lockAtText(L, g.lam) + ')'));
+    tr.appendChild(el('td', null, String(g.lostTotal)));
+    rows.appendChild(tr);
+  });
+  if (L.groups.length > 24 || L.truncated) { const tr = el('tr'), td = el('td', null, L.groups.length > 24 ? '… and ' + (L.groups.length - 24) + ' more steps.' : 'The list stops here: the failure runs on.'); td.colSpan = 5; tr.appendChild(td); rows.appendChild(tr); }
+  setText('lockSub', L.useKind === 'strength' ? 'how hard each cabinet is held, against your lock strengths' : 'how hard each cabinet is held, against the busiest one');
+  const keys = $('lockKeys'); keys.textContent = '';
+  const key = (cls, txt) => { const sp = el('span', 'lkkey'); sp.appendChild(el('i', cls)); sp.appendChild(document.createTextNode(txt)); keys.appendChild(sp); };
+  if (L.useKind === 'strength') { keys.appendChild(document.createTextNode('0')); const b = el('i', 'lkbar'); b.style.background = 'linear-gradient(90deg,' + [0, 0.25, 0.5, 0.65, 0.8, 0.9, 1].map((u) => lockColor(u, 'strength') + ' ' + (u * 100) + '%').join(',') + ')'; keys.appendChild(b); keys.appendChild(document.createTextNode('the strength you typed')); }
+  else { keys.appendChild(document.createTextNode('lightly held')); const b = el('i', 'lkbar'); b.style.background = 'linear-gradient(90deg,' + [0, 0.5, 1].map((u) => lockColor(u, 'relative') + ' ' + (u * 100) + '%').join(',') + ')'; keys.appendChild(b); keys.appendChild(document.createTextNode('the busiest')); }
+  key('ring', 'lost a lock, still on'); key('gone', 'came off'); keys.appendChild(el('span', null, 'numbers: the order they let go'));
+  $('segLkLam').style.display = L.entered ? '' : 'none';
+}
+function lockTipFill(tip, i) {
+  const L = Dlk, r = Math.floor(i / L.cols), c = i - r * L.cols;
+  tip.textContent = '';
+  tip.appendChild(el('div', 't', cabName(L, i)));
+  const row = (a, b) => { const d = el('div', 'r'); d.appendChild(el('span', null, a)); d.appendChild(el('b', null, b)); tip.appendChild(d); };
+  const left = c > 0 ? L.lockH[i - 1] : 0, right = L.lockH[i], up = L.lockV[i], down = r > 0 ? L.lockV[i - L.cols] : 0;
+  row(L.kind === 'wind' ? 'Wind on it' : L.kind === 'accel' ? 'Shaking on it' : 'Push on it', nf2(L.F[i]) + ' kgf');
+  row('Each frame fixing', nf2(L.fixF[i]) + ' kgf' + (L.TfKgf > 0 ? ' · ' + nf0(L.fixF[i] / L.TfKgf * 100) + '%' : ''));
+  row('Locks to neighbours', 'L ' + nf2(left) + ' · R ' + nf2(right) + ' · up ' + nf2(up) + ' · down ' + nf2(down));
+  const g = L.groups.findIndex((gr) => gr.hit.indexOf(i) >= 0), lostG = L.groups.findIndex((gr) => gr.lost.indexOf(i) >= 0);
+  if (lostG >= 0) row('Comes off', 'step ' + (lostG + 1) + ' at ' + nf2(L.groups[lostG].lam) + '×');
+  else if (g >= 0) row('A lock lets go', 'step ' + (g + 1) + ' at ' + nf2(L.groups[g].lam) + '×');
 }
 
 /* ------------------------------------------------------------------ controls */
@@ -3482,6 +4000,15 @@ function initControls() {
   bindPair('STM', { get: () => S.stage.muDeck, set: (v) => (S.stage.muDeck = v), fmt: (v) => (+v).toFixed(2) });
   bindPair('EI', { get: () => S.EI / 1e6, set: (v) => (S.EI = v * 1e6), fmt: (v) => (+v).toFixed(2), toSlider: (mn) => EI_POS(mn), fromSlider: (pos) => EI_MN(pos) });
   bindPair('DL', { get: () => S.defLimit, set: (v) => (S.defLimit = v), fmt: (v) => String(Math.round(v)) });
+  // cabinet locks
+  bindPair('LF', { get: () => S.locks.fixKgf, set: (v) => (S.locks.fixKgf = Math.max(0, v)), fmt: fmtKgf, toSlider: kgfToPos, fromSlider: posToKgf });
+  bindPair('LL', { get: () => S.locks.lockKgf, set: (v) => (S.locks.lockKgf = Math.max(0, v)), fmt: fmtKgf, toSlider: kgfToPos, fromSlider: posToKgf });
+  bindPair('LN', { get: () => S.locks.fixN, set: (v) => (S.locks.fixN = Math.round(v)), fmt: (v) => String(Math.round(v)) });
+  bindPair('LM', { get: () => S.locks.lockN, set: (v) => (S.locks.lockN = Math.round(v)), fmt: (v) => String(Math.round(v)) });
+  bindPair('LE', { get: () => S.locks.edge, set: (v) => (S.locks.edge = v), fmt: (v) => (+v).toFixed(2) });
+  bindPair('LS', { get: () => S.locks.stiff, set: (v) => (S.locks.stiff = v), fmt: (v) => (+v).toFixed(2), toSlider: (v) => 1000 * (Math.log10(clamp(v, 0.1, 10)) + 1) / 2, fromSlider: (pos) => Math.round(Math.pow(10, pos / 500 - 1) * 100) / 100 });
+  segs.lock = bindSeg('segLock', (v) => { S.locks.on = v === 'on'; update(); });
+  segs.lkLam = bindSeg('segLkLam', (v) => { ui.lkLam = v; segs.lkLam.set(v); dirty.lock = true; });
   // stage
   bindPair('STH', { get: () => S.stage.h, set: (v) => (S.stage.h = v), fmt: (v) => (+v).toFixed(2) });
   bindPair('STD', { get: () => S.stage.depth, set: (v) => (S.stage.depth = v), fmt: (v) => (+v).toFixed(1) });
@@ -3527,7 +4054,7 @@ function initControls() {
   $('btnAutoN').addEventListener('click', () => { S.autoN = !S.autoN; update(); });
   document.querySelectorAll('[data-dir]').forEach((b) => b.addEventListener('click', () => { S.windDir = +b.dataset.dir; update(); }));
   selectSet = initTabs('setTabs', (n) => { ui.tab = n; saveSoon(); });
-  selectRes = initTabs('resTabs', (n) => { ui.rtab = n; dirty.rear = dirty.map = dirty.bend = true; saveSoon(); });
+  selectRes = initTabs('resTabs', (n) => { ui.rtab = n; dirty.rear = dirty.map = dirty.bend = dirty.lock = true; saveSoon(); });
   document.querySelectorAll('[data-goto]').forEach((b) => b.addEventListener('click', () => { selectSet(b.dataset.goto); scrollRailTop(); }));
   document.querySelectorAll('[data-sf]').forEach((b) => b.addEventListener('click', () => { S.SF = +b.dataset.sf; update(); }));
   $('btnNew').addEventListener('click', newWall);
@@ -3561,6 +4088,8 @@ function syncControls() {
   segs.cab.set(S.cabSize); if ($('cabModel').value !== S.cab) $('cabModel').value = S.cab;
   segs.stage.set(S.stage.on ? 'on' : 'off'); segs.rest.set(S.rest.type); segs.rto.set(S.rest.to); segs.rside.set(S.rest.side); segs.prof.set(S.profile);
   segs.cam.set(ui.cam); segs.exag.set(ui.exag);
+  segs.lock.set(S.locks.on ? 'on' : 'off'); segs.lkLam.set(ui.lkLam); $('lockBox').hidden = !S.locks.on; $('lockIntro').hidden = S.locks.on;
+  $('LE-n').closest('.ctl').hidden = D.loadKind !== 'wind';                      // the extra wind on the edges is a wind thing
   const indoorNow = S.mode === 'indoor', cs = indoorNow ? S.indoorCase : 'outdoor';
   $('indoorPick').hidden = !indoorNow; $('cmpSec').hidden = !indoorNow;
   $('windIndoor').hidden = !(indoorNow && cs === 'draught'); $('windOutdoor').hidden = indoorNow;
@@ -3613,6 +4142,10 @@ function renderText() {
     : nf1(D.Wb) + ' kg in total on ' + D.N + ' bases, ' + nf1(avg) + ' each. ' + (D.req.none ? 'Nothing is needed here.' : D.req.capped ? 'Ballast alone cannot reach your margin here.' : 'Needed: ' + nf2(D.req.per) + ' kg per base.'));
   const needBtn = $('btnUseNeed'); needBtn.hidden = S.ballastAuto || D.req.none || D.req.capped || Math.abs(D.req.per - avg) < 0.05; needBtn.textContent = 'Use ' + nf1(Math.ceil(D.req.per * 10) / 10) + ' kg per base';
   setText('posNote', 'arm ' + nf(g.aB, 3) + ' m from the toe');
+  const lc = S.locks;
+  setHint('LF-h', lc.fixKgf > 0 ? nf2(lc.fixKgf * M.G / 1000) + ' kN. The load one fixing holds before it lets go.' : 'Not entered, so no fixing will let go. Type the load it breaks at (1 kN is about 102 kgf).');
+  setHint('LL-h', lc.lockKgf > 0 ? nf2(lc.lockKgf * M.G / 1000) + ' kN. The load one lock holds before it lets go.' : 'Not entered, so no cabinet lock will let go. Type the load it breaks at.');
+  setHint('LE-h', lc.edge > 1.001 ? 'Cabinets on the top edge and the side edges feel ' + nf2(lc.edge) + '× the wind, corner cabinets more. Real walls feel more there.' : 'The same wind on every cabinet.');
   setText('modeHint', outdoor ? 'Open-air wind with gusts. The sheet is written for indoor use, so treat this as a rough guide.' : 'Draught from air conditioning, fans and doors. Uses the wind scale from the sheet, which is the Beaufort scale.');
   const row = M.SCALE[S.indoorScale];
   setText('SC-v', S.indoorScale + ' · ' + row.v + ' m/s');
@@ -3691,7 +4224,7 @@ function renderText() {
   $('tTip').firstChild.textContent = lv.infin ? '∞' : lv.crit; $('tTip').querySelector('small').textContent = lv.infin ? '' : lv.unit;
   setText('tTipS', lv.infin ? lv.none : lv.critS);
 
-  renderBend(); renderMoments(); renderChecks(); renderSheet(); renderTables(); renderIndoor(); renderStrip(avg);
+  renderBend(); renderMoments(); renderChecks(); renderSheet(); renderTables(); renderIndoor(); renderStrip(avg); renderLocks();
   setText('planInfo', isWind ? nf0(w.cn * 100) + '% pushes the screen · ' + nf0(Math.abs(w.sinT) * 100) + '% slides along it'
     : kindL === 'force' ? (S.knock.from === 'both' ? 'the push is checked from the front and from the rear' : 'push from the ' + S.knock.from)
     : 'the floor moves front to back; the wall tips whichever way is weaker');
@@ -4005,8 +4538,9 @@ function updateHud() {
   const topNow = D.shake ? Math.abs(nodes[Kn]) + tiltTop : (nodes[Kn] + tiltTop) * (D.dir === 'rear' ? 1 : -1);
   const topMm = Math.abs(topNow) * 1000;
   const sp = D.strap, Tn = sp ? sim.Ph / (sp.cb * sp.n) : 0;
-  const key = [s, hc.join('~'), deg.toFixed(2), sim.liftMM(D.geom.depth).toFixed(0), topMm.toFixed(topMm < 10 ? 1 : 0), Tn.toFixed(0), sim.broken].join('|');
+  const key = [s, hc.join('~'), deg.toFixed(2), sim.liftMM(D.geom.depth).toFixed(0), topMm.toFixed(topMm < 10 ? 1 : 0), Tn.toFixed(0), sim.broken, sim.lkCount, ui.run].join('|');
   if (key === hudKey) return; hudKey = key;
+  renderLockStrip();
   const pill = $('pill'); pill.dataset.s = s === 'rocking' ? 'marginal' : s === 'falling' ? 'toppled' : s;
   $('btnReplay').classList.toggle('attn', s === 'toppled');
   pill.querySelector('use').setAttribute('href', s === 'stable' ? '#i-check' : s === 'marginal' || s === 'rocking' ? '#i-warn' : '#i-x');
@@ -4056,6 +4590,19 @@ function initPointers() {
   const endD = () => { dragD = false; plan.classList.remove('drag'); };
   plan.addEventListener('pointerup', endD); plan.addEventListener('pointercancel', endD);
 
+  const lm = $('lockMap'), ltip = $('lockTip');
+  const lockAt = (e) => {
+    const h = hits.lock; if (!h || !Dlk) return;
+    const p = ptr(e, lm), c = Math.floor((p.x - h.x0) / h.cw), r = h.rows - 1 - Math.floor((p.y - h.y0) / h.ch);
+    if (p.x < h.x0 || p.y < h.y0 || c < 0 || c >= h.cols || r < 0 || r >= h.rows) { leaveLock(); return; }
+    const i = r * h.cols + c; if (hits.lockHover !== i) { hits.lockHover = i; dirty.lock = true; }
+    lockTipFill(ltip, i); ltip.hidden = false;
+    const wr = lm.getBoundingClientRect(), tw = ltip.offsetWidth, th = ltip.offsetHeight;
+    let tx = p.x + 14, ty = p.y - th - 10; if (tx + tw > wr.width - 4) tx = p.x - tw - 14; if (ty < 2) ty = p.y + 14;
+    ltip.style.left = Math.max(2, tx) + 'px'; ltip.style.top = Math.max(2, ty) + 'px';
+  };
+  const leaveLock = () => { if (hits.lockHover != null && hits.lockHover >= 0) dirty.lock = true; hits.lockHover = -1; ltip.hidden = true; };
+  lm.addEventListener('pointermove', lockAt); lm.addEventListener('pointerdown', lockAt); lm.addEventListener('pointerleave', leaveLock);
   const map = $('map'), tip = $('mapTip'); let dragM = false;
   const setMap = (e) => {
     const h = hits.map; if (!h) return; const p = ptr(e, map); let v = hits.vAt(p.x);
@@ -4132,6 +4679,9 @@ function frame(now) {
   if (dirty.rear && shown('rear')) { safe('rear', () => drawRear($('rear'), st, hits)); dirty.rear = false; }
   if (dirty.map && shown('map')) { safe('map', () => drawMap($('map'), st, hits)); dirty.map = false; }
   if (dirty.bend && shown('bendC')) { safe('bend', () => drawBend($('bendC'), st)); dirty.bend = false; }
+  const lkNow = Dlk ? sim.lkI + ':' + sim.lkCount + ':' + ui.run : '';
+  if (lkNow !== lkKey) { lkKey = lkNow; dirty.lock = true; }
+  if (dirty.lock && Dlk && shown('lockMap')) { safe('lock', () => drawLockMap($('lockMap'), st, hits)); dirty.lock = false; }
   safe('hud', updateHud);
   requestAnimationFrame(frame);
 }
@@ -4149,13 +4699,13 @@ function init() {
   selectSet(ui.tab); selectRes(ui.rtab);
   update(); sim.reset();
   if (restored && JSON.stringify(S) !== JSON.stringify(M.defaults())) toast('Your last wall is back. Press New wall to start again.', false);
-  for (const id of ['rear', 'map', 'bendC']) new ResizeObserver(() => { dirty.rear = dirty.map = dirty.bend = true; }).observe($(id));
+  for (const id of ['rear', 'map', 'bendC', 'lockMap']) new ResizeObserver(() => { dirty.rear = dirty.map = dirty.bend = dirty.lock = true; }).observe($(id));
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { dirty.rear = dirty.map = dirty.bend = true; });
   const themeChanged = () => { resetTheme(); dirty.rear = dirty.map = dirty.bend = true; };
   try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', themeChanged); } catch (e) { /* older browsers */ }
   new MutationObserver(themeChanged).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'class', 'style'] });
-  window.__led = { S, sim, ui, hits, st, get D() { return D; }, M, update, loadScenario, applyExample, newWall, undo, startSim, endSim, pauseSim, setState,
-    redraw() { drawSide($('side'), st); if (shown('front')) drawFront($('front'), st); if (shown('plan')) drawPlan($('plan'), st, hits); if (shown('rear')) drawRear($('rear'), st, hits); if (shown('map')) drawMap($('map'), st, hits); if (shown('bendC')) drawBend($('bendC'), st); updateHud(); },
+  window.__led = { S, sim, ui, hits, st, get D() { return D; }, get Dlk() { return Dlk; }, M, update, loadScenario, applyExample, newWall, undo, startSim, endSim, pauseSim, setState,
+    redraw() { drawSide($('side'), st); if (shown('front')) drawFront($('front'), st); if (shown('plan')) drawPlan($('plan'), st, hits); if (shown('rear')) drawRear($('rear'), st, hits); if (shown('map')) drawMap($('map'), st, hits); if (shown('bendC')) drawBend($('bendC'), st); if (Dlk && shown('lockMap')) drawLockMap($('lockMap'), st, hits); updateHud(); },
     bench(n) { n = n || 30; const t0 = performance.now(); for (let i = 0; i < n; i++) { drawSide($('side'), st); drawFront($('front'), st); drawPlan($('plan'), st, hits); } const t1 = performance.now(); for (let i = 0; i < n; i++) { drawMap($('map'), st, hits); drawRear($('rear'), st, hits); drawBend($('bendC'), st); } const t2 = performance.now(); const t3 = performance.now(); for (let i = 0; i < n; i++) { M.derive(S); } const t4 = performance.now(); return { perFrameMs: (t1 - t0) / n, perDirtyMs: (t2 - t1) / n, deriveMs: (t4 - t3) / n }; } };
   requestAnimationFrame(frame);
 }

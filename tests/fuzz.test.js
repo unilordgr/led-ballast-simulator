@@ -46,6 +46,30 @@ for (let it = 0; it < 4000; it++) {
   // (a push or a shake arrives suddenly: a strap that catches the wall can see up to twice its static pull, so with straps ask for more margin)
   const margin = D.loadKind !== 'wind' && D.strap ? 2.3 : 1.3;
   if (D.SFact >= margin && sim.toppled) { bad++; if (bad < 12) console.log('STATIC OK BUT TOPPLED', D.SFact, D.gov, D.loadCase, JSON.stringify(S)); }
+  // cabinet locks: whatever the wall, the load the cabinets carry is the load the frame holds, the failures come in order, and nothing is invented
+  if (it % 2 === 0) {
+    S.locks = { on: true, fixKgf: pick([0, 0, R(0.2, 6), R(6, 60), 400]), fixN: Math.floor(R(1, 6)), lockKgf: pick([0, 0, R(0.2, 6), R(6, 60), 400]), lockN: Math.floor(R(0, 5)), edge: R(1, 3), stiff: pick([1, 1, R(0.1, 10)]) };
+    let L; try { L = M.locksFor(S, D); } catch (e) { bad++; console.log('LOCKS THROW', e.message, JSON.stringify(S)); continue; }
+    const nc = L.cols * L.rows;
+    for (const [k, v] of Object.entries({ peakFix: L.peak.fix, peakLock: L.peak.lock, needFix: L.need.fix, needLock: L.need.lock, loadTotal: L.load.total, reaction: L.net.reaction })) finite('locks ' + k, v, S);
+    for (let i = 0; i < nc; i++) { if (!isFinite(L.use[i]) || L.use[i] < 0 || !isFinite(L.F[i]) || !isFinite(L.fixF[i])) { bad++; if (bad < 12) console.log('LOCK ARRAY', i, L.use[i], L.F[i], L.fixF[i]); break; } }
+    if (Math.abs(L.net.reaction - L.net.load) > 1e-6 * Math.max(1, L.net.load)) { bad++; if (bad < 12) console.log('LOCK EQUILIBRIUM', L.net.reaction, L.net.load, JSON.stringify(S.locks)); }
+    if (Math.abs(L.need.fix - L.peak.fix * S.SF) > 1e-9 * Math.max(1, L.need.fix)) { bad++; console.log('LOCK NEED', L.need.fix, L.peak.fix, S.SF); }
+    let prevLam = 0, prevLost = 0;
+    for (const e of L.events) {
+      if (e.lam < prevLam - 1e-9 || e.lostTotal < prevLost || e.lostTotal > nc || e.n < 1 || !(e.lam > 0)) { bad++; if (bad < 12) console.log('LOCK EVENT ORDER', e.lam, prevLam, e.lostTotal, prevLost, nc); break; }
+      prevLam = e.lam; prevLost = e.lostTotal;
+    }
+    if (!L.entered && L.events.length) { bad++; console.log('LOCK EVENTS WITHOUT STRENGTHS'); }
+    if (!L.active && (L.events.length || L.peak.fix !== 0)) { bad++; console.log('LOCK LOAD WHERE NONE PULLS OFF'); }
+    if (L.events.length && L.net.lamFirst !== L.events[0].lam) { bad++; console.log('LOCK FIRST'); }
+    // the first failure is where the worst load / strength ratio says it is (before any sharing is undone)
+    const w = Math.max(L.TfKgf > 0 ? L.peak.fix / L.TfKgf : 0, L.TlKgf > 0 ? L.peak.lock / L.TlKgf : 0);
+    if (w > 0 && L.events.length && Math.abs(L.lamFirst * w - 1) > 1e-6 && !(L.lamFirst > 1e6)) { bad++; if (bad < 12) console.log('LOCK FIRST LOAD', L.lamFirst, w); }
+    const sm = new M.Sim(); sm.setRig(D, S); sm.setLocks(L); sm.reset();
+    for (let i = 0; i < 240 * 3; i++) sm.step(1 / 240);
+    if (L.events.length && sm.lkCount !== L.net.lostAt(sm.lamPeak) && !sm.toppled) { bad++; if (bad < 12) console.log('LOCK SIM COUNT', sm.lkCount, L.net.lostAt(sm.lamPeak), sm.lamPeak); }
+  }
 }
 console.log('fuzz cases', n, 'problems', bad);
 process.exit(bad ? 1 : 0);

@@ -140,10 +140,13 @@ function drawFront(canvas, st) {
   const cols = D.cols, rows = D.rows, tt = t * 0.5;
   const hue = (uu, vv) => 220 + 48 * Math.sin(uu * 5.2 + tt * 1.3) + 36 * Math.cos(vv * 6.1 - tt) + 22 * Math.sin((uu + vv) * 9 + tt * 2.1);
   const hsl = (hh, ss, ll) => 'hsl(' + ((Math.round(hh) % 360) + 360) % 360 + ',' + ss + '%,' + clamp(ll, 4, 92).toFixed(0) + '%)';
+  const lkOn = !!(sim.lk && sim.lkLost && sim.lk.n === rows * cols);               // cabinets that have let go of the frame
+  const falling = [];
   for (let r = 0; r < rows; r++) {
     const ya = y0 + r * cabH, yb = ya + cabH, vb = r / rows, vt = (r + 1) / rows;
     for (let c = 0; c < cols; c++) {
       const xa = -W / 2 + c * CAB_W2, xb = xa + CAB_W2;
+      if (lkOn && sim.lkLost[r * cols + c]) { const ts = sim.t - sim.lkLostAt[r * cols + c]; if (ts >= 0 && ts < 1.6) falling.push({ xa, xb, ya, yb, ts, uc: (c + 0.5) / cols, vm: (vb + vt) / 2 }); continue; }
       const q00 = wallPt(xa, ya, 0), q10 = wallPt(xb, ya, 0), q11 = wallPt(xb, yb, 0), q01 = wallPt(xa, yb, 0);
       if (!faceVisible(q00, q10, q01)) continue;
       const n = v3norm(v3cross(v3sub(q10, q00), v3sub(q01, q00)));
@@ -156,7 +159,14 @@ function drawFront(canvas, st) {
       ctx.fillStyle = gr; ctx.beginPath(); ctx.moveTo(p00[0], p00[1]); ctx.lineTo(p10[0], p10[1]); ctx.lineTo(p11[0], p11[1]); ctx.lineTo(p01[0], p01[1]); ctx.closePath(); ctx.fill();
       if (gloss > 0.01) { ctx.fillStyle = 'rgba(255,255,255,' + gloss.toFixed(3) + ')'; ctx.fill(); }
       ctx.strokeStyle = 'rgba(6,10,16,.55)'; ctx.lineWidth = 0.7; ctx.stroke();
+      if (lkOn && sim.lkHit[r * cols + c]) { ctx.strokeStyle = 'rgba(255,255,255,.95)'; ctx.lineWidth = 1.8; ctx.stroke(); }          // lost a lock, still hanging on
     }
+  }
+  for (const f of falling) {                                // a cabinet that has just come off drops and is blown toward the audience, then fades
+    const drop = Math.min(f.ya, 4.9 * f.ts * f.ts * 0.6), drift = 0.9 * f.ts * f.ts + 0.2 * f.ts;
+    const q = [[f.xa, f.ya], [f.xb, f.ya], [f.xb, f.yb], [f.xa, f.yb]].map(([x, y]) => P(wallPt(x, y - drop, drift)));
+    ctx.globalAlpha = clamp(1.2 - f.ts / 1.4, 0, 1); ctx.fillStyle = hsl(hue(f.uc, f.vm), 80, 44); ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); q.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.globalAlpha = 1;
   }
 
   // ---- wind streaks in front of the wall

@@ -45,6 +45,7 @@
           <button type="button" role="menuitem" data-ex="front">Front draught<small>air from the audience side</small></button>
           <button type="button" role="menuitem" data-ex="door">Door gust<small>5.4 m/s for 1.2 s on the sheet wall</small></button>
           <button type="button" role="menuitem" data-ex="knock">Knock<small>a 60 kgf shove at 1.2 m high</small></button>
+          <button type="button" role="menuitem" data-ex="weaklock">Weak locks<small>a hard shove pops one cabinet off</small></button>
           <button type="button" role="menuitem" data-ex="wobble">Stage wobble<small>1.2 m stage that sways</small></button>
           <button type="button" role="menuitem" data-ex="quake">Earthquake<small>0.24 g, the sheet wall</small></button>
           <div class="menu-h">Outdoors</div>
@@ -132,6 +133,39 @@
             <button type="button" class="btn" id="selPlus" aria-label="Add ballast to this base">+</button>
           </div>
           <div class="row" style="margin-top:8px"><button type="button" class="btn sm" id="selAll">Copy to all bases</button><span class="hint" style="margin:0">To edit one base, open Drawings, then Rear view.</span></div>
+        </div>
+      </section>
+      <section class="sec" id="lockCfg">
+        <h2>Cabinet locks <span class="sub">what-if</span></h2>
+        <div class="seg big" id="segLock" role="radiogroup" aria-label="Check the cabinet locks">
+          <button type="button" role="radio" aria-checked="true" data-v="off">Off</button>
+          <button type="button" role="radio" aria-checked="false" data-v="on">Check the locks</button>
+        </div>
+        <p class="hint" id="lockIntro">Finds which cabinet’s lock lets go first. We do not know your lock ratings, so you type them in: it is a what-if, not a prediction.</p>
+        <div id="lockBox" hidden>
+        <div class="ctl">
+          <label for="LF-n">Frame fixing strength <small>holds a cabinet to the back frame</small></label>
+          <div class="ctl-line"><input type="range" id="LF-r" min="0" max="1000" step="1" aria-label="Frame fixing strength slider"><span class="field"><input type="number" id="LF-n" min="0" max="20000" step="any" inputmode="decimal"><span class="u">kgf</span></span></div>
+          <p class="hint" id="LF-h"></p>
+        </div>
+        <div class="ctl">
+          <label for="LN-n">Fixings per cabinet</label>
+          <div class="ctl-line"><input type="range" id="LN-r" min="1" max="8" step="1" aria-label="Fixings per cabinet slider"><span class="field"><input type="number" id="LN-n" min="1" max="16" step="1" inputmode="numeric"><span class="u">×</span></span></div>
+        </div>
+        <div class="ctl">
+          <label for="LL-n">Cabinet lock strength <small>joins neighbouring cabinets</small></label>
+          <div class="ctl-line"><input type="range" id="LL-r" min="0" max="1000" step="1" aria-label="Cabinet lock strength slider"><span class="field"><input type="number" id="LL-n" min="0" max="20000" step="any" inputmode="decimal"><span class="u">kgf</span></span></div>
+          <p class="hint" id="LL-h"></p>
+        </div>
+        <div class="ctl">
+          <label for="LM-n">Locks per joint <small>between two cabinets</small></label>
+          <div class="ctl-line"><input type="range" id="LM-r" min="0" max="8" step="1" aria-label="Locks per joint slider"><span class="field"><input type="number" id="LM-n" min="0" max="16" step="1" inputmode="numeric"><span class="u">×</span></span></div>
+        </div>
+        <div class="ctl">
+          <label for="LE-n">Extra wind on the edges <small>top and sides, 1 = even</small></label>
+          <div class="ctl-line"><input type="range" id="LE-r" min="1" max="3" step="0.05" aria-label="Extra wind on the edges slider"><span class="field"><input type="number" id="LE-n" min="1" max="4" step="0.05" inputmode="decimal"><span class="u">×</span></span></div>
+          <p class="hint" id="LE-h"></p>
+        </div>
         </div>
       </section>
         <div class="pane-next"><button type="button" class="btn pri" data-goto="stage">Next: Stage and straps <svg class="ic"><use href="#i-arrow"/></svg></button></div>
@@ -440,6 +474,11 @@
           <div class="ctl-line"><input type="range" id="MU-r" min="0.1" max="1" step="0.05" aria-label="Friction slider"><span class="field"><input type="number" id="MU-n" min="0.05" max="1.5" step="0.05" inputmode="decimal"><span class="u">µ</span></span></div>
         </div>
         <div class="ctl">
+          <label for="LS-n">Lock stiffness <small>against a frame fixing</small></label>
+          <div class="ctl-line"><input type="range" id="LS-r" min="0" max="1000" step="1" aria-label="Lock stiffness slider"><span class="field"><input type="number" id="LS-n" min="0.1" max="10" step="0.1" inputmode="decimal"><span class="u">×</span></span></div>
+          <p class="hint">Only matters when the load is uneven. 1 means a cabinet lock gives as much as a frame fixing. A stiffer lock hands more of a cabinet’s load to its neighbours.</p>
+        </div>
+        <div class="ctl">
           <label for="STM-n">Friction wall on deck <small>used on a stage</small></label>
           <div class="ctl-line"><input type="range" id="STM-r" min="0.1" max="1" step="0.05" aria-label="Wall on deck friction slider"><span class="field"><input type="number" id="STM-n" min="0.05" max="1.5" step="0.05" inputmode="decimal"><span class="u">µ</span></span></div>
         </div>
@@ -464,6 +503,7 @@
             <canvas id="side" role="img" aria-label="Side view: LED screen, back frame, base plate, ballast, stage, straps and wind arrows, with the tipping pivot"></canvas>
             <div class="hud tl">
               <div class="pill" id="pill" data-s="stable" role="status"><svg class="ic"><use href="#i-check"/></svg><span id="pillText">Stable</span></div>
+              <div class="pill lkpill" id="lkPill" data-s="toppled" role="status" hidden><svg class="ic"><use href="#i-x"/></svg><span id="lkPillText">1 cabinet off</span></div>
               <dl class="live" id="live">
                 <div><dt id="liveWindK">Wind now</dt><dd id="liveWind">3.3 m/s</dd></div>
                 <div><dt id="liveForceK">Force</dt><dd id="liveForce">68 kgf</dd></div>
@@ -505,6 +545,7 @@
           <div class="vs-b">Need <b id="vsNeed">9.1</b> · Have <b id="vsHave">9.1</b> kg per base <span class="tag" id="vsAuto">auto</span></div>
           <div class="vs-c"><span id="vsLoad">Load</span> <button type="button" class="link" id="vsChange">Change</button></div>
           <div class="vs-r" id="vsRes" data-s="" hidden><svg class="ic" id="vsResIcon"><use href="#i-check"/></svg><b id="vsResK">Held</b><span id="vsResT"></span></div>
+          <div class="vs-r" id="vsLk" data-s="" hidden><svg class="ic" id="vsLkIcon"><use href="#i-check"/></svg><b>Locks</b><span id="vsLkT"></span></div>
         </div>
       </div>
       <div class="rtabs">
@@ -538,6 +579,19 @@
           <div class="tile"><div class="k" id="tTipK">Tips over at</div><div class="v" id="tTip">4.0<small>m/s</small></div><div class="s" id="tTipS"></div></div>
         </div>
       </section>
+      <section class="sec" id="lockSec" hidden>
+        <h2>Cabinet locks <span class="tag">what-if</span></h2>
+        <p class="vtext" id="lockText" aria-live="polite"></p>
+        <div class="tiles" id="lockTiles">
+          <div class="tile"><div class="k" id="lkLoadK">Load on one cabinet</div><div class="v" id="lkLoad">0<small>kgf</small></div><div class="s" id="lkLoadS"></div></div>
+          <div class="tile"><div class="k">Busiest frame fixing</div><div class="v" id="lkFix">0<small>kgf</small></div><div class="s" id="lkFixS"></div></div>
+          <div class="tile"><div class="k">Busiest cabinet lock</div><div class="v" id="lkLock">0<small>kgf</small></div><div class="s" id="lkLockS"></div></div>
+          <div class="tile"><div class="k" id="lkNeedK">Strength you need</div><div class="v" id="lkNeed">0<small>kgf</small></div><div class="s" id="lkNeedS"></div></div>
+        </div>
+        <details class="tv" id="lockSeq" style="margin:12px -16px -14px"><summary>Failure order</summary>
+          <div class="tablewrap"><table class="data"><thead><tr><th>#</th><th>Where</th><th>What lets go</th><th id="lkThAt">At</th><th>Cabinets off</th></tr></thead><tbody id="lockRows"></tbody></table></div>
+        </details>
+      </section>
         </div>
         <div class="rpane" id="rp-draw" role="tabpanel" aria-labelledby="rt-draw" tabindex="-1" hidden>
           <div class="rest" id="rest">
@@ -559,6 +613,20 @@
           </div>
           <div class="hud bl2"><div class="legend" id="frontLegend" aria-hidden="true"></div></div>
         </div>
+      </figure>
+      <figure class="fig wide" id="lockFig" hidden>
+        <figcaption>Cabinet locks <span class="sub" id="lockSub">how hard each cabinet is held</span></figcaption>
+        <div class="frontwrap lockwrap">
+          <canvas id="lockMap" role="img" aria-label="Face-on map of the cabinets, coloured by how hard their locks are worked, with the order in which locks let go"></canvas>
+          <div class="hud tr2">
+            <div class="seg tiny" id="segLkLam" role="radiogroup" aria-label="Which load to show">
+              <button type="button" role="radio" aria-checked="true" data-v="1">Your load</button>
+              <button type="button" role="radio" aria-checked="false" data-v="sf">With margin</button>
+            </div>
+          </div>
+          <div class="tip" id="lockTip" hidden></div>
+        </div>
+        <div class="foot" id="lockKeys"></div>
       </figure>
       <figure class="fig">
         <figcaption>Rear view <span class="sub" id="rearSub">seen from behind · click a base</span></figcaption>

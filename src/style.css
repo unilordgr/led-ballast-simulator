@@ -366,3 +366,20 @@ table.cmp td .gov{display:inline-block;margin-left:4px;padding:0 5px;border-radi
   .hud .icon-btn{height:34px}.btn-run{height:38px}
 }
 @media (prefers-contrast:more){.tn,.tag{border:1px solid var(--ink)}}
+
+
+/* ---------- cabinet locks ---------- */
+.lockwrap{position:relative;background:#0b111a}
+#lockMap{display:block;width:100%;height:clamp(230px,34vw,400px);cursor:crosshair;touch-action:pan-y}
+.lockwrap .tip{min-width:190px}
+.lockwrap .hud.tr2{top:5px;bottom:auto;right:6px}
+.lkpill{margin-top:6px}
+.vs-r[data-s="warn"] .ic,.vs-r[data-s="warn"] b{color:var(--warn-ink)}
+.vs-r[data-s="none"] .ic,.vs-r[data-s="none"] b{color:var(--ink3)}
+.fig .foot i.lkbar,.lkbar{display:inline-block;width:120px;height:10px;border-radius:3px;vertical-align:-1px;margin:0 6px}
+.lkkey i{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:5px;vertical-align:-2px}
+.lkkey i.ring{background:transparent;border:2px solid #fff}
+.lkkey i.gone{background:#080d14;border:1px solid rgba(208,59,59,.75)}
+#lockSec .vtext{margin-bottom:12px}
+#lockSec .vtext b{font-weight:600}
+td.lk-n{font-family:var(--font-mono)}

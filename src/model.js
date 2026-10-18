@@ -86,6 +86,8 @@
       quake: { pga: 0.24, floor: 1, dur: 12 },                    // ground acceleration in g, building amplification, seconds
       notional: { pct: 2.5 },                                     // % of the weight, sideways
       Cf: 1.0, depth: SHEET.depth, mu: 0.5,
+      // the cabinet locks (a what-if): strengths in kgf per fixing or lock, 0 = not entered; how many per cabinet or joint; wind factor on the top and side edges
+      locks: { on: false, fixKgf: 0, fixN: 2, lockKgf: 0, lockN: 2, edge: 1.5, stiff: 1 },
       frame: { perRow: SHEET.frame.perRow, perBase: SHEET.frame.perBase, perW: SHEET.frame.perW },
       EI: 2.9e6, gaRatio: 0.12, defLimit: 150,
       stage: { on: false, h: 1.2, depth: 6, extra: 2, front: 4.6, deckKgm2: 40, rating: 750, muDeck: 0.4, muFloor: 0.5 },
@@ -532,6 +534,242 @@
     });
   }
 
+  /* ---- cabinet locks: a what-if on the lock strengths you type in ----
+     Every cabinet is a rigid block that the load pulls away from the back frame. It is held by `fixN` fixings to the frame and by `lockN` locks to
+     each neighbour, all springs. The loads are solved as a network: cabinets are the nodes, the frame is the ground. A cabinet that is pulled harder
+     than its neighbours hands part of its load to them through the locks. The element with the largest load / strength lets go first; the network is
+     solved again without it, and so on. Either one cabinet comes off, or the failure runs on like a zip. With the same springs everywhere and an
+     even load nothing is shared and every cabinet carries its own load, so a weak link only shows where the load or the strength is uneven.
+     All forces are linear in the load factor, so the first failure comes at 1 / (largest ratio) and later ones follow in order. */
+  // a long run of failures is cut off by the work it takes (cabinets times solver passes), not by the clock, so the same wall always gives the same answer
+  const LOCK_EVENTS_MAX = 300, LOCK_WORK_MAX = 2e6, LOCK_LAM_FAR = 1e6;
+
+  // conjugate gradients on the cabinet network (symmetric, positive definite, Jacobi preconditioner); x holds the starting guess and the answer.
+  // w: four work arrays of length n, kept between solves.
+  function lockCG(n, A, dinv, b, x, maxIt, tol2rel, w) {
+    const r = w[0], z = w[1], p = w[2], q = w[3];
+    A(x, q);
+    let bn = 0, rz = 0;
+    for (let i = 0; i < n; i++) { r[i] = b[i] - q[i]; bn += b[i] * b[i]; }
+    if (bn === 0) { x.fill(0); return 0; }
+    for (let i = 0; i < n; i++) { z[i] = r[i] * dinv[i]; p[i] = z[i]; rz += r[i] * z[i]; }
+    const tol2 = tol2rel * bn;
+    let it = 0;
+    for (; it < maxIt; it++) {
+      let rn = 0; for (let i = 0; i < n; i++) rn += r[i] * r[i];
+      if (rn <= tol2) break;
+      A(p, q);
+      let pq = 0; for (let i = 0; i < n; i++) pq += p[i] * q[i];
+      if (!(pq > 0)) break;
+      const alpha = rz / pq; let rz2 = 0;
+      for (let i = 0; i < n; i++) { x[i] += alpha * p[i]; r[i] -= alpha * q[i]; z[i] = r[i] * dinv[i]; rz2 += r[i] * z[i]; }
+      const beta = rz2 / rz; rz = rz2;
+      for (let i = 0; i < n; i++) p[i] = z[i] + beta * p[i];
+    }
+    return it;
+  }
+
+  /* o: { cols, rows, F (N per cabinet at load factor 1, index row * cols + col, row 0 at the bottom), fixN, lockN, kl (a lock's stiffness over a fixing's),
+          Tf, Tl (N that one fixing or lock holds, 0 = not entered), lamStop, workMax } */
+  function lockNet(o) {
+    const cols = o.cols, rows = o.rows, n = cols * rows, F = o.F;
+    const kf = 1, kl = o.kl > 0 ? o.kl : 1, Tf = o.Tf > 0 ? o.Tf : 0, Tl = o.Tl > 0 ? o.Tl : 0;
+    const fixN = clamp(Math.round(o.fixN), 1, 16), lockN = clamp(Math.round(o.lockN), 0, 16);
+    const lamStop = o.lamStop > 0 ? o.lamStop : 1.5, workMax = o.workMax > 0 ? o.workMax : LOCK_WORK_MAX;
+    let work = 0;
+    const alive = new Uint8Array(n).fill(1), nf = new Uint8Array(n).fill(fixN), nlh = new Uint8Array(n), nlv = new Uint8Array(n);
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { const i = r * cols + c; if (c < cols - 1) nlh[i] = lockN; if (r < rows - 1) nlv[i] = lockN; }
+    const x = new Float64Array(n), rhs = new Float64Array(n), dinv = new Float64Array(n), wk = [0, 1, 2, 3].map(() => new Float64Array(n));
+    const A = (v, out) => {
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const i = r * cols + c;
+          if (!alive[i]) { out[i] = 0; continue; }
+          const vi = v[i]; let s = nf[i] * kf * vi;
+          if (c < cols - 1 && nlh[i] && alive[i + 1]) s += nlh[i] * kl * (vi - v[i + 1]);
+          if (c > 0 && nlh[i - 1] && alive[i - 1]) s += nlh[i - 1] * kl * (vi - v[i - 1]);
+          if (r < rows - 1 && nlv[i] && alive[i + cols]) s += nlv[i] * kl * (vi - v[i + cols]);
+          if (r > 0 && nlv[i - cols] && alive[i - cols]) s += nlv[i - cols] * kl * (vi - v[i - cols]);
+          out[i] = s;
+        }
+      }
+    };
+    const solve = (tol2rel) => {
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const i = r * cols + c;
+          if (!alive[i]) { rhs[i] = 0; x[i] = 0; dinv[i] = 0; continue; }
+          rhs[i] = F[i];
+          let d = nf[i] * kf;
+          if (c < cols - 1 && nlh[i] && alive[i + 1]) d += nlh[i] * kl;
+          if (c > 0 && nlh[i - 1] && alive[i - 1]) d += nlh[i - 1] * kl;
+          if (r < rows - 1 && nlv[i] && alive[i + cols]) d += nlv[i] * kl;
+          if (r > 0 && nlv[i - cols] && alive[i - cols]) d += nlv[i - cols] * kl;
+          dinv[i] = d > 0 ? 1 / d : 0;
+        }
+      }
+      work += n * (1 + lockCG(n, A, dinv, rhs, x, Math.min(8000, 10 * n + 50), tol2rel, wk));
+    };
+    // cabinets that no longer have any path to the frame come off
+    const groundCheck = () => {
+      const seen = new Uint8Array(n), stack = [];
+      for (let i = 0; i < n; i++) if (alive[i] && nf[i] > 0) { seen[i] = 1; stack.push(i); }
+      while (stack.length) {
+        const i = stack.pop(), r = Math.floor(i / cols), c = i - r * cols;
+        const go = (j) => { if (alive[j] && !seen[j]) { seen[j] = 1; stack.push(j); } };
+        if (c < cols - 1 && nlh[i]) go(i + 1);
+        if (c > 0 && nlh[i - 1]) go(i - 1);
+        if (r < rows - 1 && nlv[i]) go(i + cols);
+        if (r > 0 && nlv[i - cols]) go(i - cols);
+      }
+      const gone = [];
+      for (let i = 0; i < n; i++) if (alive[i] && !seen[i]) { alive[i] = 0; x[i] = 0; gone.push(i); }
+      return gone;
+    };
+    // the largest load / strength over all fixings and locks that can still break
+    const worst = () => {
+      let best = 0;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const i = r * cols + c; if (!alive[i]) continue;
+          if (Tf > 0 && nf[i] > 0) best = Math.max(best, kf * Math.abs(x[i]) / Tf);
+          if (Tl > 0) {
+            if (c < cols - 1 && nlh[i] && alive[i + 1]) best = Math.max(best, kl * Math.abs(x[i] - x[i + 1]) / Tl);
+            if (r < rows - 1 && nlv[i] && alive[i + cols]) best = Math.max(best, kl * Math.abs(x[i] - x[i + cols]) / Tl);
+          }
+        }
+      }
+      return best;
+    };
+
+    solve(1e-26);                                                    // the whole wall, before anything lets go
+    const fixF = new Float64Array(n), lockH = new Float64Array(n), lockV = new Float64Array(n);
+    let peakFix = 0, peakLock = 0, fixAt = -1, lockAt = -1;
+    for (let r = rows - 1; r >= 0; r--) {                            // top row first, so a tie is called for the top left
+      for (let c = 0; c < cols; c++) {
+        const i = r * cols + c;
+        fixF[i] = kf * Math.abs(x[i]);
+        if (c < cols - 1 && nlh[i]) lockH[i] = kl * Math.abs(x[i] - x[i + 1]);
+        if (r < rows - 1 && nlv[i]) lockV[i] = kl * Math.abs(x[i] - x[i + cols]);
+        if (fixF[i] > peakFix * (1 + 1e-9)) { peakFix = fixF[i]; fixAt = i; }
+        const lk = Math.max(lockH[i], lockV[i]);
+        if (lk > peakLock * (1 + 1e-9)) { peakLock = lk; lockAt = i; }
+      }
+    }
+    const x1 = Float64Array.from(x);
+    let reaction = 0; for (let i = 0; i < n; i++) reaction += nf[i] * kf * x[i];
+
+    const events = []; let lam = 0, lostTotal = 0, truncated = false;
+    if (Tf > 0 || Tl > 0) {
+      for (let iter = 0; iter < LOCK_EVENTS_MAX; iter++) {
+        if (iter > 0) solve(1e-20);
+        const best = worst();
+        if (!(best > 1e-12)) break;
+        const lamFail = Math.max(lam, 1 / best);
+        if (lamFail > LOCK_LAM_FAR) break;
+        if (events.length && lamFail > lamStop) break;
+        if (events.length && work > workMax) { truncated = true; break; }
+        const thr = best * (1 - 1e-9), picks = [];
+        for (let r = rows - 1; r >= 0; r--) {                        // everything within rounding of the worst goes together; top left is named first
+          for (let c = 0; c < cols; c++) {
+            const i = r * cols + c; if (!alive[i]) continue;
+            if (Tf > 0 && nf[i] > 0 && kf * Math.abs(x[i]) / Tf >= thr) picks.push([0, i]);
+            if (Tl > 0) {
+              if (c < cols - 1 && nlh[i] && alive[i + 1] && kl * Math.abs(x[i] - x[i + 1]) / Tl >= thr) picks.push([1, i]);
+              if (r < rows - 1 && nlv[i] && alive[i + cols] && kl * Math.abs(x[i] - x[i + cols]) / Tl >= thr) picks.push([2, i]);
+            }
+          }
+        }
+        const kinds = { fix: 0, lockH: 0, lockV: 0 }, hit = new Set();
+        let cut = false;                                             // did a fixing or a joint run out, so a cabinet may have lost its path to the frame?
+        for (const [k, i] of picks) {
+          if (k === 0) { if (--nf[i] === 0) cut = true; kinds.fix++; hit.add(i); }
+          else if (k === 1) { if (--nlh[i] === 0) cut = true; kinds.lockH++; hit.add(i); hit.add(i + 1); }
+          else { if (--nlv[i] === 0) cut = true; kinds.lockV++; hit.add(i); hit.add(i + cols); }
+        }
+        const lost = cut ? groundCheck() : []; lostTotal += lost.length; lam = lamFail;
+        events.push({ lam: lamFail, n: picks.length, kinds, hit: Array.from(hit), lost, lostTotal, rep: { kind: picks[0][0], i: picks[0][1] } });
+        if (lostTotal >= n) break;
+      }
+    }
+    const lostAt = (lf) => { let c = 0; for (const e of events) { if (e.lam <= lf * (1 + 1e-9)) c = e.lostTotal; else break; } return c; };
+    return { cols, rows, n, x: x1, fixF, lockH, lockV, peakFix, peakLock, fixAt, lockAt, reaction, load: F.reduce((s, v) => s + v, 0),
+      events, lamFirst: events.length ? events[0].lam : Infinity, lostAt, truncated, kf, kl, Tf, Tl, fixN, lockN };
+  }
+
+  /* The cabinet loads of the load in play, and the lock network under them. Wind (outdoors, a draught, a door gust) is a pressure on every cabinet,
+     stronger up the height outdoors and by `edge` on the top and side edges; a shake is the cabinet's own weight times the acceleration; a knock is one
+     push on one cabinet. Only a load that pulls the cabinets off their frame is checked: wind from the front, or a push from the front, presses them
+     onto it. Returns null when the check is off. */
+  function locksFor(S, D) {
+    const lk = S.locks; if (!lk || !lk.on || !D) return null;
+    const cols = D.cols, rows = D.rows, n = cols * rows, cabH = D.cabH, area = CAB.w * cabH, y0 = SHEET.screenBottom, hs = D.geom.hs;
+    const kind = D.loadKind, cs = D.loadCase;
+    const alpha = S.mode === 'outdoor' ? (PROFILE_ALPHA[S.profile] || 0) : 0;
+    const psi = (zAbs) => (alpha ? Math.pow(Math.max(zAbs, 3) / 10, 2 * alpha) : 1);
+    const edge = clamp(+lk.edge || 1, 1, 4), fixN = clamp(Math.round(lk.fixN) || 1, 1, 16), lockN = clamp(Math.round(lk.lockN) || 0, 0, 16);
+    const out = { on: true, kind, cs, cols, rows, n, cabH, area, fixN, lockN, edge, stiff: lk.stiff > 0 ? lk.stiff : 1, TfKgf: Math.max(0, +lk.fixKgf || 0), TlKgf: Math.max(0, +lk.lockKgf || 0) };
+    out.entered = out.TfKgf > 0 || out.TlKgf > 0;
+    out.active = kind === 'wind' ? D.dir === 'rear' : kind === 'force' ? S.knock.from !== 'front' : true;
+    out.why = out.active ? '' : kind === 'wind' ? 'Wind from the front presses the cabinets onto the frame, so their locks are not pulled.' : 'A push from the front presses the cabinet onto the frame, so its locks are not pulled.';
+    const F = new Float64Array(n);
+    let ld = null, knockAt = -1;
+    if (out.active) {
+      if (kind === 'wind') {
+        const pBase = D.wind.qPeak * D.wind.cn * S.Cf;
+        for (let r = 0; r < rows; r++) {
+          const p = pBase * psi(hs + y0 + (r + 0.5) * cabH);
+          for (let c = 0; c < cols; c++) F[r * cols + c] = p * area * (1 + (edge - 1) * ((r === rows - 1 ? 1 : 0) + (c === 0 ? 1 : 0) + (c === cols - 1 ? 1 : 0)));
+        }
+      } else if (kind === 'accel') {
+        ld = loadFor(S, cs, 'rear'); F.fill(S.kgm2 * area * ld.acc);
+      } else {
+        const row = clamp(Math.floor((S.knock.h - y0) / cabH), 0, rows - 1); knockAt = row * cols + Math.floor(cols / 2);
+        F[knockAt] = Math.max(0, S.knock.kgf) * G;
+      }
+    }
+    out.knockAt = knockAt;
+    const net = lockNet({ cols, rows, F, fixN, lockN, kl: out.stiff, Tf: out.TfKgf * G, Tl: out.TlKgf * G, lamStop: Math.max(S.SF, 1) * (1 + 1e-9) });
+    const kgf = (v) => v / G, f32 = (a) => Float32Array.from(a, kgf);
+    out.net = net;
+    out.load = { total: kgf(net.load), max: kgf(Math.max(0, ...F)), mean: n ? kgf(net.load / n) : 0 };
+    out.F = f32(F); out.fixF = f32(net.fixF); out.lockH = f32(net.lockH); out.lockV = f32(net.lockV);
+    out.peak = { fix: kgf(net.peakFix), lock: kgf(net.peakLock), fixAt: net.fixAt, lockAt: net.lockAt };
+    out.need = { fix: out.peak.fix * S.SF, lock: out.peak.lock * S.SF };
+    out.events = net.events; out.lamFirst = net.lamFirst; out.truncated = net.truncated;
+    out.sig = [kind, cs, out.active, n, out.TfKgf, out.TlKgf, fixN, lockN, edge, out.stiff, net.load.toFixed(4), isFinite(net.lamFirst) ? net.lamFirst.toFixed(6) : '-', net.events.length].join('|');
+    out.lostAt1 = net.lostAt(1); out.lostAtSF = net.lostAt(S.SF);
+    // one failure drags the next along within a hair of the same load, so the failures that come within 3% of each other are shown as one step
+    out.groups = [];
+    net.events.forEach((e, k) => {
+      const g = out.groups[out.groups.length - 1];
+      if (g && e.lam <= g.lam * 1.03) { g.last = k; g.n += e.n; g.fix += e.kinds.fix; g.lock += e.kinds.lockH + e.kinds.lockV; for (const i of e.hit) g.hitSet.add(i); for (const i of e.lost) g.lost.push(i); g.lostTotal = e.lostTotal; }
+      else out.groups.push({ first: k, last: k, lam: e.lam, n: e.n, fix: e.kinds.fix, lock: e.kinds.lockH + e.kinds.lockV, hitSet: new Set(e.hit), lost: e.lost.slice(), lostTotal: e.lostTotal, rep: e.rep });
+    });
+    for (const g of out.groups) { g.hit = Array.from(g.hitSet); delete g.hitSet; }
+    // how hard each cabinet's own fixings and the joints around it are worked: against the strengths you typed, else against the busiest element
+    const use = new Float32Array(n), ref = Math.max(out.peak.fix, out.peak.lock, 1e-12);
+    const fixU = (v) => (!out.entered ? v / ref : out.TfKgf > 0 ? v / out.TfKgf : 0), lockU = (v) => (!out.entered ? v / ref : out.TlKgf > 0 ? v / out.TlKgf : 0);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const i = r * cols + c;
+        let u = fixU(out.fixF[i]);
+        for (const v of [out.lockH[i], c > 0 ? out.lockH[i - 1] : 0, out.lockV[i], r > 0 ? out.lockV[i - cols] : 0]) u = Math.max(u, lockU(v));
+        use[i] = u;
+      }
+    }
+    out.use = use; out.useKind = out.entered ? 'strength' : 'relative';
+    out.status = !out.active ? 'inactive' : !out.entered ? 'none' : out.lamFirst < 1 - 1e-9 ? 'fail' : out.lamFirst < S.SF - 1e-9 ? 'marginal' : 'ok';
+    out.unit = kind === 'wind' ? { v: D.wind.vPeak } : kind === 'accel' ? { g: out.active ? ld.acc / G : 0 } : { kgf: S.knock.kgf };      // what a load factor of 1 is
+    // the load at which the first lock lets go, in the units of the load in play
+    if (isFinite(out.lamFirst) && out.active) {
+      if (kind === 'wind') { const v = D.wind.vPeak * Math.sqrt(out.lamFirst); out.limit = { kind: 'speed', v, bft: beaufort(v) }; }
+      else if (kind === 'accel') out.limit = { kind: 'accel', g: out.lamFirst * ld.acc / G };
+      else out.limit = { kind: 'force', kgf: out.lamFirst * S.knock.kgf };
+    } else out.limit = null;
+    return out;
+  }
+
   /* ---- how each load changes in time: all deterministic, so a replay looks the same ---- */
   const smoothstep = (x) => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
   // a pulse that repeats: starts at t0, rises, holds, falls, then rests before the next one
@@ -596,9 +834,31 @@
     }
     reset() {
       this.t = 0; this.phi = 0; this.omega = 0; this.toppled = false; this.toppledAt = -1; this.maxPhi = 0; this.impactAt = -1; this.lastU = 0; this.lam = 0; this.lamB = 0; this.Ph = 0; this.broken = false;
+      this.resetLocks();
       this.side = this.dirSign || 1;                       // +1 tilting forward about the front toe, -1 backward about the rear toe
       this.pushDir = this.dirSign || 1;
       this.ground = 0;                                     // how far the floor is displaced, -1..1 of its peak
+    }
+    /* The cabinet locks (see locksFor): when the load on the wall has reached the next lock's limit, that lock lets go, and any cabinet left with no hold
+       on the frame comes off. The load only has to have been that high once, so it is the highest load so far that counts. */
+    setLocks(L) {
+      const lk = L && L.active && L.events && L.events.length ? L : null, sig = lk ? lk.sig : '';
+      if (sig !== this.lkSig) { this.lkSig = sig; this.lk = lk; this.resetLocks(); } else this.lk = lk;
+    }
+    resetLocks() {
+      this.lkI = 0; this.lamPeak = 0; this.lkCount = 0; this.lkLastAt = -1;
+      const n = this.lk ? this.lk.n : 0;
+      this.lkLost = n ? new Uint8Array(n) : null; this.lkHit = n ? new Uint8Array(n) : null; this.lkLostAt = n ? new Float32Array(n).fill(-1) : null;
+    }
+    lockStep() {
+      const L = this.lk; if (!L || this.toppled || !this.lkLost) return;
+      const a = Math.abs(this.lam); if (a > this.lamPeak) this.lamPeak = a;
+      while (this.lkI < L.events.length && this.lamPeak >= L.events[this.lkI].lam * (1 - 1e-12)) {
+        const ev = L.events[this.lkI++];
+        for (const i of ev.hit) this.lkHit[i] = 1;
+        for (const i of ev.lost) { this.lkLost[i] = 1; this.lkLostAt[i] = this.t; this.lkCount++; }
+        this.lkLastAt = this.t;
+      }
     }
     ramp(t) { const x = clamp(t / 1.5, 0, 1); return x * x * (3 - 2 * x); }
     windU(t) { const m = 1 + this.gust * gustN(t * 0.9 + 3); return this.ramp(t) * m / (1 + this.gust); }
@@ -632,7 +892,7 @@
         default: { const u = this.windU(t); return { u, lam: u * u, gs: 1, g: 0 }; }
       }
     }
-    step(dt) { if (this.shake) this.stepShake(dt); else this.stepOne(dt); }
+    step(dt) { if (this.shake) this.stepShake(dt); else this.stepOne(dt); this.lockStep(); }
     stepOne(dt) {                                          // wind, a door gust or a push from one side: tips one way, about one toe
       const R = this.rig; if (!R) return;
       this.t += dt;
@@ -713,5 +973,5 @@
     liftMM(depth) { return Math.sin(this.phi) * depth * 1000; }
   }
 
-  return { G, CAB, SHEET, SCALE, CABINETS, cabArea, cabHeight, RESTRAINT, PROFILE_ALPHA, MAX_BALLAST, SF_CAP, BFT_NAME, BFT_SPEED, bftRange, CASES, CASE_KIND, CASE_NAME, QUAKE_ZONES, beaufort, defaults, derive, compareCases, loadFor, makeRecord, gustN, Sim, sheetBases, clamp, windInfo, scanSys, lamAt };
+  return { G, CAB, SHEET, SCALE, CABINETS, cabArea, cabHeight, RESTRAINT, PROFILE_ALPHA, MAX_BALLAST, SF_CAP, BFT_NAME, BFT_SPEED, bftRange, CASES, CASE_KIND, CASE_NAME, QUAKE_ZONES, beaufort, defaults, derive, compareCases, loadFor, lockNet, locksFor, makeRecord, gustN, Sim, sheetBases, clamp, windInfo, scanSys, lamAt };
 });
