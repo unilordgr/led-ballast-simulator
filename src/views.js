@@ -206,7 +206,7 @@ function drawPlan(canvas, st, hit) {
   ctx.fillStyle = BP.force; ctx.beginPath(); ctx.arc(sx, sy, 8.5, 0, TAU); ctx.fill();
   ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
   hit.handle = { x: sx, y: sy };
-  const vTxt = nf(D.wind.vPeak, 1) + ' m/s' + (S.mode === 'outdoor' && S.gust > 0 ? ' peak' : '');
+  const vTxt = nf(D.wind.vPeak, 1) + ' m/s' + (S.mode === 'outdoor' && D.wind.gust > 0 ? ' peak' : '');
   txt(ctx, vTxt, cx, cy + R * 0.32, { font: '600 11.5px ' + F.mono, align: 'center', color: BP.bright, halo: BP.bg, haloW: 3 });
   txt(ctx, nf0(D.wind.cn * 100) + '% pushes the screen', cx, cy + R * 0.32 + 14, { font: '500 10.5px ' + F.sans, align: 'center', color: BP.cyan, halo: BP.bg, haloW: 3 });
 }

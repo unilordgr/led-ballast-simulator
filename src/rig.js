@@ -23,6 +23,9 @@ function ballastPlates(kg) {
 
 /* instantaneous elastic deflection (m, in the tipping direction) at each beam node, from the live wind and strap force */
 function bendNow(D, sim) {
+  if (D.loadKind === 'accel' && D.dyn.kind !== 'none' && sim.shake && D.modal.phi) {      // a shaken wall: the first mode moves, with its own swing
+    const sg = D.dir === 'rear' ? 1 : -1; return D.modal.phi.map((p) => p * sim.q * sg);
+  }
   const b = D.bend, lam = sim.lamB !== undefined ? sim.lamB : (sim.lam || 0), Ph = sim.Ph || 0;
   return b.nodeZ.map((z, k) => lam * b.dp1[k] - Ph * b.Gat[k]);
 }
@@ -294,7 +297,7 @@ function drawLoadArrows(ctx, V, st, ink, fade) {
 function drawWindNotes(ctx, V, st, ink, u) {
   const { S, D, sim } = st, g = D.geom, rear = D.dir === 'rear', sign = rear ? 1 : -1;
   const faceX = V.X(rear ? -0.05 : 0.05);
-  const pStrength = D.wind.qPeak * D.wind.cn * S.Cf * u * u;
+  const pStrength = D.wind.qPeak * D.wind.cn * D.wind.cfTot * u * u;
   const fade = 1 - smooth((sim.phi - 0.12) / 0.5);
   const y0 = M.SHEET.screenBottom, hs = g.hs;
   const alpha = D.profileAlpha || 0;

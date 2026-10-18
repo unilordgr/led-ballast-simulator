@@ -85,9 +85,11 @@
       sway: { amp: 5, f: 1.5, bounce: 0 },                        // mm, Hz, up-and-down shake as a fraction of g
       quake: { pga: 0.24, floor: 1, dur: 12 },                    // ground acceleration in g, building amplification, seconds
       notional: { pct: 2.5 },                                     // % of the weight, sideways
-      Cf: 1.0, depth: SHEET.depth, mu: 0.5,
-      // the cabinet locks (a what-if): strengths in kgf per fixing or lock, 0 = not entered; how many per cabinet or joint; wind factor on the top and side edges
-      locks: { on: false, fixKgf: 0, fixN: 2, lockKgf: 0, lockN: 2, edge: 1.5, stiff: 1 },
+      Cf: 1.0, shape: 'auto', gustAuto: true, depth: SHEET.depth, mu: 0.5,
+      zeta: 0.01,                                                 // damping of the wall's own vibration, as a share of critical
+      share: 1,                                                   // how much the wall shares load between bases: 1 = it acts as one piece, 0 = each base stands alone
+      // the cabinet locks (a what-if): strengths in kgf per fixing or lock, 0 = not entered; how many per cabinet or joint; how the wind is spread over the cabinets
+      locks: { on: false, fixKgf: 0, fixN: 2, lockKgf: 0, lockN: 2, pattern: 'en', edge: 1.5, stiff: 1, preset: 'custom' },
       frame: { perRow: SHEET.frame.perRow, perBase: SHEET.frame.perBase, perW: SHEET.frame.perW },
       EI: 2.9e6, gaRatio: 0.12, defLimit: 150,
       stage: { on: false, h: 1.2, depth: 6, extra: 2, front: 4.6, deckKgm2: 40, rating: 750, muDeck: 0.4, muFloor: 0.5 },
@@ -101,17 +103,134 @@
   }
   function sheetBases(S) { return Math.max(1, Math.ceil(Math.round(S.W / CAB.w) / 2)); }
 
+  /* ---- wind: the numbers the standards use, instead of the sheet's single coefficient ----
+     EN 1991-1-4:2005+A1:2010. Table 4.1 gives the roughness of each terrain category, (4.7) the turbulence intensity Iv = 1 / ln(z / z0), and (4.8) the
+     peak velocity pressure as (1 + 7 Iv) times the mean, so the peak speed is the square root of that times the mean speed. The three terrain choices of
+     the app stand for categories II, III and IV. */
+  const TERRAIN = {
+    uniform: { cat: 'II', z0: 0.05, zmin: 2, name: 'open country' },
+    open: { cat: 'II', z0: 0.05, zmin: 2, name: 'open country' },
+    suburban: { cat: 'III', z0: 0.3, zmin: 5, name: 'suburb or village' },
+    urban: { cat: 'IV', z0: 1.0, zmin: 10, name: 'city' }
+  };
+  const terrainOf = (profile) => TERRAIN[profile] || TERRAIN.open;
+  const turbInt = (profile, z) => { const t = terrainOf(profile); return 1 / Math.log(Math.max(z, t.zmin) / t.z0); };
+  const gustEN = (profile, z) => clamp(Math.sqrt(1 + 7 * turbInt(profile, z)) - 1, 0, 1);
+  const wallTop = (S) => (S.stage && S.stage.on ? S.stage.h : 0) + SHEET.screenBottom + S.H;
+  // the height the wind is taken at: a free-standing wall at its top (EN 7.4.1, ze = h), a signboard at its middle (Figure 7.21, ze = zg + h/2)
+  const zRef = (S) => (S.W / S.H > 1 && (S.stage && S.stage.on ? S.stage.h : 0) + SHEET.screenBottom <= S.H / 4 ? wallTop(S) : wallTop(S) - S.H / 2);
+  const gustOf = (S) => (S.gustAuto ? gustEN(S.profile, zRef(S)) : clamp(+S.gust || 0, 0, 1));
+
+  /* EN 1991-1-4 Table 7.9: net pressure coefficients of a solid free-standing wall (no return corners) by zone, for length over height 3, 5 and 10 or more.
+     Figure 7.19 measures the zones from the free end that an oblique wind arrives at: A within 0.3 h, B up to 2 h, C up to 4 h, D beyond (a shorter wall just has
+     fewer of them). The wall's overall coefficient is the average along its length. For the cabinets the wind can arrive at either end, so each column takes the
+     larger of the two. */
+  const EN_WALL_ROWS = [{ lh: 3, A: 2.3, B: 1.4, C: 1.2, D: 1.2 }, { lh: 5, A: 2.9, B: 1.8, C: 1.4, D: 1.2 }, { lh: 10, A: 3.4, B: 2.1, C: 1.7, D: 1.2 }];
+  function enWallRow(lh) {                                    // between the tabulated lengths by straight lines, outside them the nearest row
+    const R = EN_WALL_ROWS;
+    if (lh <= R[0].lh) return R[0];
+    if (lh >= R[2].lh) return R[2];
+    const i = lh < R[1].lh ? 0 : 1, a = R[i], b = R[i + 1], t = (lh - a.lh) / (b.lh - a.lh);
+    return { A: a.A + t * (b.A - a.A), B: a.B + t * (b.B - a.B), C: a.C + t * (b.C - a.C), D: a.D + t * (b.D - a.D) };
+  }
+  const enZone = (d) => (d < 0.3 ? 'A' : d < 2 ? 'B' : d < 4 ? 'C' : 'D');
+  function enWall(W, h) {                                     // the coefficient of each cabinet column (wind arriving at the left end), the larger of that and its mirror, and the average
+    const cp = enWallRow(W / h), n = Math.max(1, Math.round(W / CAB.w)), cols = [];
+    let sum = 0;
+    for (let c = 0; c < n; c++) { const v = cp[enZone((c + 0.5) * W / n / h)]; cols.push(v); sum += v; }
+    return { cols, env: cols.map((v, c) => Math.max(v, cols[n - 1 - c])), mean: sum / n, row: cp };
+  }
+  // shape (force) coefficients to choose from; cf null means the standard's own rule by the size of the wall
+  const WIND_SHAPES = [
+    { id: 'sheet', cf: 1.0, name: 'The sheet', note: 'The ballast sheet uses a coefficient of 1.', src: '' },
+    { id: 'roe', cf: 1.57, name: 'Closed LED panel, wind tunnel', note: 'ROE Visual measured 1.57 in a wind tunnel for a fully closed panel.', src: 'https://www.roevisual.com/en/knowledge-and-support/blow-through-led-panel-design-dont-get-fooled' },
+    { id: 'en', cf: null, name: 'EN 1991-1-4 by size', note: 'A wall near the ground and longer than it is high: the net coefficients of Table 7.9, averaged over its zones. Anything else is a signboard: 1.8.', src: 'EN 1991-1-4:2005+A1:2010, 7.4' },
+    { id: 'ensign', cf: 1.8, name: 'Signboard, EN 1991-1-4', note: 'Force coefficient 1.8 for a signboard (7.4.3).', src: 'EN 1991-1-4:2005+A1:2010, 7.4.3' },
+    { id: 'mesh', cf: 0.81, name: 'Mesh panel, wind tunnel', note: 'ROE Visual measured 0.81 for the see-through Vanish V8T.', src: 'https://www.roevisual.com/en/knowledge-and-support/blow-through-led-panel-design-dont-get-fooled' }
+  ];
+  // EN 7.4: a wall near the ground and longer than it is high is a wall (Table 7.9), anything else a signboard (7.4.3)
+  const enRule = (S) => (S.W / S.H > 1 && (S.stage && S.stage.on ? S.stage.h : 0) + SHEET.screenBottom <= S.H / 4 ? 'wall' : 'sign');
+  function cfOf(S) {                                          // the force coefficient in use
+    const sh = S.shape || 'auto';
+    if (sh === 'custom') return S.Cf;
+    if (S.mode !== 'outdoor') return 1.0;                      // the presets are for outdoor wind; indoors the sheet's wind scale stays as it is
+    const en = () => (enRule(S) === 'wall' ? enWall(S.W, S.H).mean : 1.8);
+    if (sh === 'auto') return S.mode === 'outdoor' ? en() : 1.0;
+    const p = WIND_SHAPES.find((x) => x.id === sh);
+    return !p ? S.Cf : p.cf == null ? en() : p.cf;
+  }
+
   function windInfo(S) {
-    let vMean, qMean, pk;
+    let vMean, qMean, pk = 1, gust = 0;
     if (S.mode === 'indoor' && S.indoorCase === 'door') {
-      vMean = S.door.v; qMean = RHO_FACTOR * vMean * vMean; pk = 1;
+      vMean = S.door.v; qMean = RHO_FACTOR * vMean * vMean;
     } else if (S.mode === 'indoor') {
       const row = SCALE[clamp(Math.round(S.indoorScale), 0, SCALE.length - 1)];
-      vMean = row.v; qMean = row.q; pk = 1;
+      vMean = row.v; qMean = row.q;
     } else {
-      vMean = S.outSpeed; qMean = RHO_FACTOR * vMean * vMean; pk = 1 + S.gust;
+      vMean = S.outSpeed; qMean = RHO_FACTOR * vMean * vMean; gust = gustOf(S); pk = 1 + gust;
     }
-    return { vMean, qMean, pk, vPeak: vMean * pk, qPeak: qMean * pk * pk };
+    return { vMean, qMean, pk, gust, cf: cfOf(S), vPeak: vMean * pk, qPeak: qMean * pk * pk };
+  }
+
+  /* ---- how the wall vibrates ----
+     The wall is a cantilever from its base (the same beam as the bending). Its first sideways mode comes from Rayleigh's quotient on the shape it takes
+     under its own weight acting sideways, with the bending and shear flexibility of the beam. With the mode shape phi (1 at the top), the participation
+     Gamma = sum(m phi) / sum(m phi^2), A = sum(m h) (the overturning moment of the rigid wall per unit of acceleration) and B = sum(m phi h): a floor that
+     accelerates the wall by a(t) makes the mode move, q'' + 2 zeta w q' + w^2 q = Gamma a(t), and the moment on the base is A a(t) - B q''. For a steady
+     shake at the ratio r = f / f1 that is amplified by |1 + (B Gamma / A) r^2 / (1 - r^2 + 2 i zeta r)|. */
+  const TWO_PI = Math.PI * 2;
+  function modalOf(EIw, GAw, mass, L) {
+    const n = 48, dzm = L / n, mj = mass / n;
+    const fl = (z, a) => (z <= a ? z * z * (3 * a - z) / (6 * EIw) : a * a * (3 * z - a) / (6 * EIw)) + Math.min(z, a) / GAw;
+    const zj = Array.from({ length: n }, (_, j) => (j + 0.5) * dzm);
+    const defAt = (z) => { let d = 0; for (let j = 0; j < n; j++) d += mj * fl(z, zj[j]); return d; };
+    const dj = zj.map(defAt), top = defAt(L);
+    let num = 0, den = 0, sPhi = 0, sPhi2 = 0, A0 = 0, B0 = 0;
+    for (let j = 0; j < n; j++) {
+      const ph = dj[j] / top;
+      num += mj * dj[j]; den += mj * dj[j] * dj[j];
+      sPhi += mj * ph; sPhi2 += mj * ph * ph; A0 += mj * zj[j]; B0 += mj * ph * zj[j];
+    }
+    const w = Math.sqrt(num / den);
+    return { w, f1: w / TWO_PI, T1: TWO_PI / w, Gamma: sPhi / sPhi2, mass, L, A0, B0, Sphi: sPhi, phiAt: (z) => defAt(z) / top };
+  }
+  const modalSys = (mod, hs) => { const A = mod.A0 + hs * mod.mass, B = mod.B0 + hs * mod.Sphi; return { A, B, k: B * mod.Gamma / A }; };     // hs: the pivot is that much lower than the base
+  function dafHarm(r, zeta, k) {
+    const dr = 1 - r * r, di = 2 * zeta * r, m2 = dr * dr + di * di;
+    return m2 < 1e-12 ? Infinity : Math.hypot(1 + k * r * r * dr / m2, k * r * r * di / m2);
+  }
+  // the same amplification for the earthquake record: the first mode is run through it and the largest base moment compared with the rigid wall's
+  const dafCache = {};
+  function quakeDaf(mod, ms, zeta, dur) {
+    const key = [mod.w.toFixed(3), mod.Gamma.toFixed(4), ms.A.toFixed(1), ms.B.toFixed(1), zeta, dur].join('|');
+    if (dafCache[key] !== undefined) return dafCache[key];
+    const rec = makeRecord(1, dur).acc, dt0 = REC_DT / 4;
+    if (mod.w * dt0 > 8) return (dafCache[key] = 1);                                       // stiff enough to follow the floor
+    const ns = Math.max(1, Math.ceil(mod.w * dt0 / 0.25)), dt = dt0 / ns, steps = Math.ceil((dur + 1) / dt);
+    let q = 0, qd = 0, mx = 0, mr = 0;
+    for (let i = 0; i < steps; i++) {
+      const a = recAt(rec, i * dt), qdd = mod.Gamma * a - 2 * zeta * mod.w * qd - mod.w * mod.w * q, Mo = ms.A * a - ms.B * qdd;
+      mx = Math.max(mx, Math.abs(Mo)); mr = Math.max(mr, Math.abs(ms.A * a));
+      qd += qdd * dt; q += qd * dt;
+    }
+    return (dafCache[key] = mr > 0 ? mx / mr : 1);
+  }
+  /* EN 1991-1-4 6.3.1 and Annex B: the structural factor cs cd, which says how much the wall's size takes off the gust load and how much its own vibration
+     adds. (B.3) background, (B.2) spectrum, (B.6) resonance, (B.4)-(B.5) peak factor, F.5 damping with the aerodynamic part (F.16). */
+  function windCscd(S, mod, wind, mass) {
+    const t = terrainOf(S.profile), zs = Math.max(wallTop(S) - S.H / 2, t.zmin), Iv = turbInt(S.profile, zs);      // Figure 6.1 c): a board's reference height is the middle of the board
+    const Lz = 300 * Math.pow(zs / 200, 0.67 + 0.05 * Math.log(t.z0)), b = S.W, h = S.H;
+    const B2 = 1 / (1 + 0.9 * Math.pow((b + h) / Lz, 0.63));
+    const alpha = PROFILE_ALPHA[S.profile] || 0, vm = Math.max(0.5, wind.vMean * (alpha ? Math.pow(zs / 10, alpha) : 1));
+    const n1 = mod.f1, fL = n1 * Lz / vm, SL = 6.8 * fL / Math.pow(1 + 10.2 * fL, 5 / 3);
+    const adm = (eta) => (eta > 1e-9 ? 1 / eta - (1 - Math.exp(-2 * eta)) / (2 * eta * eta) : 1);
+    const Rh = adm(4.6 * h / Lz * fL), Rb = adm(4.6 * b / Lz * fL);
+    const delta = TWO_PI * S.zeta + wind.cf * 1.25 * vm / (2 * n1 * (mass / (b * h)));
+    const R2 = Math.PI * Math.PI / (2 * delta) * SL * Rh * Rb;
+    const nu = Math.max(n1 * Math.sqrt(R2 / (B2 + R2)), 0.08), x = Math.sqrt(2 * Math.log(nu * 600));
+    const kp = Math.max(x + 0.6 / x, 3);
+    return { cscd: (1 + 2 * kp * Iv * Math.sqrt(B2 + R2)) / (1 + 7 * Iv), B2, R2, kp, Iv, delta, zs, Lz };
   }
 
   /* ---------- rigid-body scan ----------
@@ -122,7 +241,7 @@
     // (a floor dropping away makes the wall lighter, one pushing up makes it heavier).
     const c = Math.cos(phi), s = Math.sin(phi), gs = sys.gs === undefined ? 1 : sys.gs;
     let Mr = 0, Ti = 0;
-    for (const k of sys.comps) { Mr += k.m * G * (k.xi * c - k.eta * s); Ti += k.m * (k.eta * c + k.xi * s); }
+    for (const k of sys.comps) { Mr += k.m * G * (k.xi * c - k.eta * s); Ti += k.m * (k.dyn === undefined ? 1 : k.dyn) * (k.eta * c + k.xi * s); }       // k.dyn: the first mode amplifies this mass's inertia
     return { c, s, Mr: Mr * gs, M1: sys.acc ? sys.acc * Ti : sys.F * c * (sys.hc * c + sys.xiw * s) };
   }
   function strapGamma(st, c, s) {            // moment arm of the horizontal strap force about the toe (vertical component included)
@@ -209,6 +328,20 @@
     const y0 = SHEET.screenBottom;
     const L = y0 + S.H;
 
+    // --- how it vibrates: the first mode, and what it does to shaking and to gusts
+    const zeta = clamp(+S.zeta || 0.01, 0.001, 0.2), massW = Ws + Wf, mod = modalOf(N * S.EI, S.gaRatio * N * S.EI, massW, L);
+    const msW = modalSys(mod, 0), msS = modalSys(mod, hs);
+    let dynM = { W: 1, S: 1 }, dyn = { kind: 'none', W: 1, S: 1, f1: mod.f1, zeta };
+    if (accel && ld.cs === 'sway') {                                  // a steady shake: how close it is to the wall's own frequency
+      const r = Math.max(0.05, S.sway.f) / mod.f1;
+      dynM = { W: Math.max(1, dafHarm(r, zeta, msW.k)), S: Math.max(1, dafHarm(r, zeta, msS.k)) }; dyn = { kind: 'sway', r, W: dynM.W, S: dynM.S, f1: mod.f1, zeta };
+    } else if (accel && ld.cs === 'quake') {                          // the record, run through the first mode
+      dynM = { W: Math.max(1, quakeDaf(mod, msW, zeta, S.quake.dur)), S: Math.max(1, quakeDaf(mod, msS, zeta, S.quake.dur)) }; dyn = { kind: 'quake', W: dynM.W, S: dynM.S, f1: mod.f1, zeta };
+    }
+    let dynW = 1, wcs = null;
+    if (!ld && S.mode === 'outdoor') { wcs = windCscd(S, mod, wind, massW); dynW = Math.max(1, wcs.cscd); }      // never below 1: the size effect is not counted as a relief
+    wind.dyn = dynW; wind.cfTot = wind.cf * dynW;
+
     // --- base geometry (wall on its deck)
     const dd = S.depth - SHEET.depth;
     const pos = S.ballastPos === 'auto' ? ((ld && ld.pos) || (dir === 'rear' ? 'rear' : 'mid')) : S.ballastPos;   // the sheet puts the ballast mid-base for front wind
@@ -225,7 +358,7 @@
     const psi = (zAbs) => (alpha ? Math.pow(Math.max(zAbs, 3) / 10, 2 * alpha) : 1);
     const NS = 24, dz = S.H / NS, zs = new Array(NS), line = new Array(NS);
     let F = 0, M1 = 0;
-    const pBase = accel ? ld.acc * (Ws + Wf) / A : wind.qPeak * cn * S.Cf;      // N/m2; for shaking, the inertia of the screen and frame spread over the face
+    const pBase = accel ? ld.acc * dynM.W * (Ws + Wf) / A : wind.qPeak * cn * wind.cfTot;      // N/m2; for shaking, the inertia of the screen and frame spread over the face
     for (let j = 0; j < NS; j++) {
       const z = y0 + (j + 0.5) * dz, p = pBase * psi(hs + z);
       zs[j] = z; line[j] = p * S.W; F += p * S.W * dz; M1 += p * S.W * dz * z;
@@ -251,6 +384,8 @@
       let m = 0; for (let j = 0; j < NS; j++) if (zs[j] > z) m += line[j] * dz * (zs[j] - z);
       Mp[k] = m;
     }
+
+    const phiNodes = nodeZ.map((z) => mod.phiAt(z));                  // the first mode's shape at the same nodes
 
     // --- restraint (strap, cable or rear truss)
     const R = S.rest;
@@ -294,15 +429,15 @@
       stage = { h: stg.h, depth: stg.depth, width, area, mass: stageMass, front: stg.front, rearGap: stg.depth - stg.front - (S.depth + 0.1), rating: stg.rating,
         xFront: stg.front, xRear: -(stg.depth - stg.front) };
     }
-    const compsW = (B) => [
-      { m: Ws, xi: aS, eta: y0 + S.H / 2, Ig: Ws * S.H * S.H / 12 },
-      { m: Wf, xi: aF, eta: y0 + S.H / 2, Ig: Wf * S.H * S.H / 12 },
+    const compsW = (B, dn) => [
+      { m: Ws, xi: aS, eta: y0 + S.H / 2, Ig: Ws * S.H * S.H / 12, dyn: dn },
+      { m: Wf, xi: aF, eta: y0 + S.H / 2, Ig: Wf * S.H * S.H / 12, dyn: dn },
       { m: B, xi: aB, eta: y0 + 0.12, Ig: 0 }];
     const inert = accel ? { acc: ld.acc, gs: ld.gs } : null;           // shaking: inertia of every mass, and a lighter or heavier wall
     const useS = !!stg && !(ld && ld.systems && ld.systems.S === false);   // deck sway moves the deck under the wall, not the stage on the floor
-    const sysW = (B) => Object.assign({ kind: 'W', comps: compsW(B), F, hc, xiw: aS, strap: strapFor('W', aS) }, inert);
+    const sysW = (B) => Object.assign({ kind: 'W', comps: compsW(B, dynM.W), F, hc, xiw: aS, strap: strapFor('W', aS) }, inert);
     const sysS = (B) => {
-      const c = compsW(B).map((k) => ({ m: k.m, xi: k.xi + xi0, eta: k.eta + hs, Ig: k.Ig }));
+      const c = compsW(B, dynM.S).map((k) => ({ m: k.m, xi: k.xi + xi0, eta: k.eta + hs, Ig: k.Ig, dyn: k.dyn }));
       c.push({ m: stageMass, xi: stg.depth / 2, eta: 0.55 * hs, Ig: stageMass * (stg.depth * stg.depth + hs * hs) / 12 });
       return Object.assign({ kind: 'S', comps: c, F, hc: hs + hc, xiw: xiScreenS, strap: strapFor('S', xiScreenS) }, inert);
     };
@@ -342,7 +477,21 @@
     const Wb = sum(ballast);
 
     // --- the answer: safety factor of the governing system
-    const lm = lamOf(Wb);
+    // Uneven ballast. The sheet divides the total over the bases, as if the wall acted as one piece. A wall can also be taken one base at a time, each with
+    // its slice of the weight and of the wind, so that the weakest base decides. S.share says how much the wall shares between its bases: 1 is the first, 0 the second.
+    const sliceSys = (sys, Bi) => Object.assign({}, sys, {
+      comps: sys.comps.map((k, i) => (i === 2 ? Object.assign({}, k, { m: Bi }) : Object.assign({}, k, { m: k.m / N }))), F: sys.F / N,
+      strap: sys.strap ? Object.assign({}, sys.strap, { kh: sys.strap.kh / N, c0: sys.strap.c0 / N, PhCap: sys.strap.PhCap / N }) : null });
+    const topB = Math.max(...ballast), uneven = N > 1 && topB - Math.min(...ballast) > 1e-6 * Math.max(1, topB), shr = clamp(S.share === undefined ? 1 : +S.share, 0, 1);
+    const lmShared = lamOf(Wb);
+    let lm = lmShared, baseSF = null, sfInd = lmShared.lam;
+    if (uneven) {
+      const cap = SF_CAP * 10, per = ballast.map((b) => ({ w: Math.min(scanSys(sliceSys(sysW(b), b)).lamMax, cap), s: useS ? Math.min(scanSys(sliceSys(sysS(b), b)).lamMax, cap) : Infinity }));
+      const indW = Math.min(...per.map((x) => x.w)), indS = useS ? Math.min(...per.map((x) => x.s)) : Infinity;
+      const lamWc = indW + shr * (lmShared.lamW - indW), lamSc = useS ? indS + shr * (lmShared.lamS - indS) : Infinity;
+      lm = { lamW: lamWc, lamS: lamSc, lam: Math.min(lamWc, lamSc), gov: lamSc < lamWc ? 'S' : 'W' };
+      baseSF = per.map((x) => Math.min(x.w, x.s)); sfInd = Math.min(indW, indS);
+    }
     const SFact = Math.min(lm.lam, 1e9);
     const status = SFact >= S.SF - 1e-9 ? 'stable' : (SFact >= 1 - 1e-9 ? 'marginal' : 'tipping');
     const gov = lm.gov, sysG = gov === 'S' ? sysS(Wb) : sysW(Wb);
@@ -357,13 +506,13 @@
     const part = (k) => k.m * (k.xi * cC - k.eta * sC) * gsG;
     const Mpart = { s: part(sysG.comps[0]), f: part(sysG.comps[1]), b: part(sysG.comps[2]), stage: stg && gov === 'S' ? part(sysG.comps[3]) : 0, strap: 0 };
     if (sysG.strap) Mpart.strap = stC.Ph * strapGamma(sysG.strap, cC, sC) / G;
-    const Fdisp = sysG.acc ? sysG.acc * sum(sysG.comps.map((k) => k.m)) : F;           // N: the push, or the inertia of everything that moves
-    const TiG = sysG.acc ? sysG.comps.reduce((t, k) => t + k.m * (k.eta * cC + k.xi * sC), 0) : 0;
+    const Fdisp = sysG.acc ? sysG.acc * sum(sysG.comps.map((k) => k.m * (k.dyn === undefined ? 1 : k.dyn))) : F;           // N: the push, or the inertia of everything that moves
+    const TiG = sysG.acc ? sysG.comps.reduce((t, k) => t + k.m * (k.dyn === undefined ? 1 : k.dyn) * (k.eta * cC + k.xi * sC), 0) : 0;
     const MwG = sysG.acc ? sysG.acc * TiG / G : (gov === 'S' ? hs + hc : hc) * Fkgf;
     const M = { w: MwG, wSF: S.SF * MwG, s: Mpart.s, f: Mpart.f, b: Mpart.b, stage: Mpart.stage, strap: Mpart.strap, rest: Mpart.s + Mpart.f + Mpart.b + Mpart.stage + Mpart.strap, gov };
     const aBgov = gov === 'S' ? aB + xi0 : aB;
     const MwShare = MwG / N, base0 = (M.rest - M.b) / N;
-    const local = ballast.map((b) => (MwShare > 1e-9 ? SFact + (b - Wb / N) * aBgov / MwShare : Infinity));
+    const local = baseSF || ballast.map((b) => (MwShare > 1e-9 ? SFact + (b - Wb / N) * aBgov / MwShare : Infinity));
 
     // --- limits (peak wind speed scales as sqrt(load factor))
     const vCritPeak = isFinite(SFact) && F > 0 ? wind.vPeak * Math.sqrt(SFact) : Infinity;
@@ -428,7 +577,8 @@
         m: sys.comps.map((k) => k.m), x: sys.comps.map((k) => k.xi), y: sys.comps.map((k) => k.eta), Ig: sys.comps.map((k) => k.Ig),
         F, hc: sys.hc, xiw: sys.xiw, strap: sys.strap, gov: sys.kind, hs, tipDir,
         bendStrap: internal ? { c0: sb.c0, dp1: sb.dp1a, gp: sb.gp, PhCap: sb.PhCap } : null,
-        acc: sys.acc || 0, gs: sys.gs === undefined ? 1 : sys.gs
+        acc: sys.acc || 0, gs: sys.gs === undefined ? 1 : sys.gs,
+        modal: accel && ld.cs !== 'notional' ? { w: mod.w, zeta, Gamma: mod.Gamma, B: sys.kind === 'S' ? msS.B : msW.B } : null
       };
       r.I = 0; let mx = 0, my = 0;
       for (let i = 0; i < r.m.length; i++) {
@@ -461,11 +611,12 @@
       F: { kgf: Fdisp / G, kgfMean: accel || pushed ? Fdisp / G : FkgfMean, N: Fdisp },
       M, Mpart,
       req: { totalRaw: reqTotalRaw, total: reqTotal, per: reqPer, perRaw: reqTotalRaw / N, none: reqTotal <= 1e-9 && reqTotalRaw <= 0 || ((hasStrap || accel) && reqTotal <= 1e-9), capped: capHit || reqPer > MAX_BALLAST },
-      ballast, SFact, status, lam: lm,
+      ballast, SFact, status, lam: lm, uneven, share: shr, sfInd: Math.min(sfInd, 1e9), sfShared: Math.min(lmShared.lam, 1e9),
       limits,
       slide, slideStage, deck, stage, strap: strapOut, bend, lean, eq: { phi, Ph: Phn, none: !!eq.none, capped: scanG.capped },
       local, rig, rigs, gov, sfOf, reqPerAtSpeed, reqPerAtLoad, profileAlpha: alpha,
       loadKind: accel ? 'accel' : pushed ? 'force' : 'wind',
+      modal: { f1: mod.f1, T1: mod.T1, zeta, Gamma: mod.Gamma, kW: msW.k, mass: massW, phi: phiNodes }, dyn, wcs,
       sys: { W: sysW, S: stg ? sysS : null }
     };
   }
@@ -533,6 +684,30 @@
       return { id, name: CASE_NAME[id], kind: CASE_KIND[id], SF: Dn.SFact, status: Dn.status, req: Dr.req.per, none: Dr.req.none, capped: Dr.req.capped, limits: Dn.limits, gov: Dn.gov };
     });
   }
+
+  /* ---- lock strength presets ----
+     Makers do not publish the pull-off strength of a cabinet lock. What they publish are hanging and stacking limits, and those give a lower bound for the lock
+     system that carries them. That is a vertical load, so it is only a guide to the pull-off strength. `basis` says where a number came from: 'published' (as
+     the maker states it), 'derived' (worked out from published limits), 'standard' (an ISO fastener table) or 'example' (made up, to try a weak lock). */
+  const LOCK_PRESETS = [
+    { id: 'roe-bp2', group: 'Makers', name: 'ROE Black Pearl BP2 V2, joint between panels', lock: { kgf: 444, n: 2 }, basis: 'derived',
+      note: 'Derived. The spec sheet lets 20 panels of 9.35 kg hang with a safety factor of 5 (the product page now says 8). The top joint carries 19 panels, 178 kg, so it must hold at least 5 × 178 = 888 kgf. Shared over an assumed 2 locks: 444 kgf each. A vertical rating, so only a guide to the pull-off strength.',
+      src: [['ROE BP2 V2 spec sheet', 'https://www.roevisual.com/uploads/Images/Products/Black%20Pearl%202%20V2/bp-v2-specs.pdf'], ['ROE Black Pearl page', 'https://www.roevisual.com/us-en/products/black-pearl']] },
+    { id: 'planar-cli', group: 'Makers', name: 'Planar CarbonLight CLI, per cabinet', lock: { kgf: 500, n: 2 }, basis: 'derived',
+      note: 'Derived. Planar states a weight bearing capacity of 1,000 kg per cabinet for hanging. Shared over an assumed 2 locks: 500 kgf each. A vertical rating, so only a guide to the pull-off strength.',
+      src: [['Planar CLI brochure', 'https://www.planar.com/media/442248/planar-carbonlight-cli-series_brochure_web.pdf']] },
+    { id: 'planar-cla', group: 'Makers', name: 'Planar CarbonLight CLA, small 250 mm cabinet', lock: { kgf: 150, n: 2 }, basis: 'derived',
+      note: 'Derived. Planar states a weight bearing capacity of 300 kg per cabinet for hanging. Shared over an assumed 2 locks: 150 kgf each. A vertical rating, so only a guide to the pull-off strength.',
+      src: [['Planar CLA brochure', 'https://www.planar.com/media/438679/planar_carbonlight_cla_series_brochure.pdf']] },
+    { id: 'm6', group: 'Standard fasteners', name: 'M6 bolt, class 8.8', fix: { kgf: 1640, n: 2 }, basis: 'standard',
+      note: 'ISO 898-1: an M6 class 8.8 bolt breaks in tension at 16.1 kN (stress area 20.1 mm² × 800 MPa), about 1,640 kgf. The bolt only: the thread, the lug or the frame may give way sooner.',
+      src: [['ISO metric thread minimum ultimate tensile loads (Optimas)', 'https://optimas.com/technical-resources/iso-metric-thread-minimum-ultimate-tensile-loads/'], ['Screw loads (Roymech)', 'https://roymech.org/Useful_Tables/Screws/Screw_loads.html']] },
+    { id: 'm8', group: 'Standard fasteners', name: 'M8 bolt, class 8.8', fix: { kgf: 2980, n: 2 }, basis: 'standard',
+      note: 'ISO 898-1: an M8 class 8.8 bolt breaks in tension at 29.2 kN (stress area 36.6 mm² × 800 MPa), about 2,980 kgf. The bolt only: the thread, the lug or the frame may give way sooner.',
+      src: [['ISO metric thread minimum ultimate tensile loads (Optimas)', 'https://optimas.com/technical-resources/iso-metric-thread-minimum-ultimate-tensile-loads/'], ['Screw loads (Roymech)', 'https://roymech.org/Useful_Tables/Screws/Screw_loads.html']] },
+    { id: 'weak', group: 'Examples', name: 'A weak lock, 20 kgf', fix: { kgf: 20, n: 2 }, lock: { kgf: 20, n: 2 }, basis: 'example', note: 'Made up, to see what happens with a lock that is much weaker than the makers\' hanging ratings.', src: [] },
+    { id: 'vweak', group: 'Examples', name: 'A very weak lock, 5 kgf', fix: { kgf: 5, n: 2 }, lock: { kgf: 5, n: 2 }, basis: 'example', note: 'Made up, to see what happens with a lock that is almost not there.', src: [] }
+  ];
 
   /* ---- cabinet locks: a what-if on the lock strengths you type in ----
      Every cabinet is a rigid block that the load pulls away from the back frame. It is held by `fixN` fixings to the frame and by `lockN` locks to
@@ -708,7 +883,8 @@
     const alpha = S.mode === 'outdoor' ? (PROFILE_ALPHA[S.profile] || 0) : 0;
     const psi = (zAbs) => (alpha ? Math.pow(Math.max(zAbs, 3) / 10, 2 * alpha) : 1);
     const edge = clamp(+lk.edge || 1, 1, 4), fixN = clamp(Math.round(lk.fixN) || 1, 1, 16), lockN = clamp(Math.round(lk.lockN) || 0, 0, 16);
-    const out = { on: true, kind, cs, cols, rows, n, cabH, area, fixN, lockN, edge, stiff: lk.stiff > 0 ? lk.stiff : 1, TfKgf: Math.max(0, +lk.fixKgf || 0), TlKgf: Math.max(0, +lk.lockKgf || 0) };
+    const pat = lk.pattern === 'edge' || lk.pattern === 'even' ? lk.pattern : 'en', enw = pat === 'en' && enRule(S) === 'wall' ? enWall(S.W, S.H) : null;
+    const out = { on: true, kind, cs, cols, rows, n, cabH, area, fixN, lockN, edge, pattern: pat === 'en' ? (enw ? 'en' : 'even') : pat, stiff: lk.stiff > 0 ? lk.stiff : 1, TfKgf: Math.max(0, +lk.fixKgf || 0), TlKgf: Math.max(0, +lk.lockKgf || 0) };
     out.entered = out.TfKgf > 0 || out.TlKgf > 0;
     out.active = kind === 'wind' ? D.dir === 'rear' : kind === 'force' ? S.knock.from !== 'front' : true;
     out.why = out.active ? '' : kind === 'wind' ? 'Wind from the front presses the cabinets onto the frame, so their locks are not pulled.' : 'A push from the front presses the cabinet onto the frame, so its locks are not pulled.';
@@ -716,10 +892,14 @@
     let ld = null, knockAt = -1;
     if (out.active) {
       if (kind === 'wind') {
-        const pBase = D.wind.qPeak * D.wind.cn * S.Cf;
+        const pBase = D.wind.qPeak * D.wind.cn * D.wind.cfTot;
         for (let r = 0; r < rows; r++) {
           const p = pBase * psi(hs + y0 + (r + 0.5) * cabH);
-          for (let c = 0; c < cols; c++) F[r * cols + c] = p * area * (1 + (edge - 1) * ((r === rows - 1 ? 1 : 0) + (c === 0 ? 1 : 0) + (c === cols - 1 ? 1 : 0)));
+          for (let c = 0; c < cols; c++) {
+            const f = pat === 'edge' ? 1 + (edge - 1) * ((r === rows - 1 ? 1 : 0) + (c === 0 ? 1 : 0) + (c === cols - 1 ? 1 : 0))      // a plain factor on the top and side edges
+              : enw ? enw.env[c] / enw.mean : 1;                                                                                    // or the zones of EN 1991-1-4 Table 7.9 (the wind can arrive at either end)
+            F[r * cols + c] = p * area * f;
+          }
         }
       } else if (kind === 'accel') {
         ld = loadFor(S, cs, 'rear'); F.fill(S.kgm2 * area * ld.acc);
@@ -822,7 +1002,7 @@
   class Sim {
     constructor() { this.rig = null; this.gust = 0; this.reset(); }
     setRig(D, S) {
-      this.rig = D.rig; this.gust = S.mode === 'outdoor' ? S.gust : 0;
+      this.rig = D.rig; this.gust = S.mode === 'outdoor' ? D.wind.gust : 0;
       this.dirSign = D.dir === 'rear' ? 1 : -1; this.cn = D.wind.cn;
       this.caseId = D.loadCase || 'draught';
       this.shake = D.shake || null;                       // loads that can tip the wall either way: two rigs, one per toe
@@ -834,6 +1014,7 @@
     }
     reset() {
       this.t = 0; this.phi = 0; this.omega = 0; this.toppled = false; this.toppledAt = -1; this.maxPhi = 0; this.impactAt = -1; this.lastU = 0; this.lam = 0; this.lamB = 0; this.Ph = 0; this.broken = false;
+      this.q = 0; this.qd = 0; this.qdd = 0; this.qMax = 0;      // the first mode of the wall: how far its top has moved, how fast, how fast that changes, the most it has swung
       this.resetLocks();
       this.side = this.dirSign || 1;                       // +1 tilting forward about the front toe, -1 backward about the rear toe
       this.pushDir = this.dirSign || 1;
@@ -859,6 +1040,14 @@
         for (const i of ev.lost) { this.lkLost[i] = 1; this.lkLostAt[i] = this.t; this.lkCount++; }
         this.lkLastAt = this.t;
       }
+    }
+    /* The first mode, q'' + 2 zeta w q' + w^2 q = Gamma a. A stiff wall has a fast mode, so the step is cut up to keep it stable; above about 300 Hz it just follows the load. */
+    stepMode(md, a, dt) {
+      const wdt = md.w * dt;
+      if (wdt > 8) { this.q = md.Gamma * a / (md.w * md.w); this.qd = 0; this.qdd = 0; return; }
+      const ns = Math.max(1, Math.ceil(wdt / 0.25)), h = dt / ns;
+      for (let k = 0; k < ns; k++) { this.qdd = md.Gamma * a - 2 * md.zeta * md.w * this.qd - md.w * md.w * this.q; this.qd += this.qdd * h; this.q += this.qd * h; }
+      const amp = Math.hypot(this.q, this.qd / md.w); if (amp > this.qMax) this.qMax = amp;          // how big the vibration has been, to tell when it has died down
     }
     ramp(t) { const x = clamp(t / 1.5, 0, 1); return x * x * (3 - 2 * x); }
     windU(t) { const m = 1 + this.gust * gustN(t * 0.9 + 3); return this.ramp(t) * m / (1 + this.gust); }
@@ -936,11 +1125,13 @@
       this.lastU = L.u; this.lam = lam; this.ground = L.g;
       this.lamB = lam * this.dirSign;                      // the load factor along the weaker way, which is how the bending is worked out
       if (Math.abs(lam) > 1e-3) this.pushDir = lam >= 0 ? 1 : -1;       // which way the last push went (for the picture)
+      const md = this.shake.fwd.modal;                      // the wall's first mode moves under the shake; its inertia takes part of the load off the base and puts it back
+      if (md) this.stepMode(md, this.shake.fwd.acc * lam, dt);
       const moment = (side, phi) => {
         const r = side > 0 ? this.shake.fwd : this.shake.back, c = Math.cos(phi), s = Math.sin(phi), ll = side * lam;   // ll < 0: the load helps this side
         let Tr = 0, Ti = 0;
         for (let i = 0; i < r.m.length; i++) { Tr += r.m[i] * G * (r.x[i] * c - r.y[i] * s); Ti += r.m[i] * (r.y[i] * c + r.x[i] * s); }
-        const Tw = r.acc ? ll * r.acc * Ti : ll * r.F * c * (r.hc * c + r.xiw * s);
+        const Tw = r.acc ? ll * r.acc * Ti - (r.modal ? side * this.qdd * r.modal.B : 0) : ll * r.F * c * (r.hc * c + r.xiw * s);
         let Ph = 0, Tst = 0; const st = r.strap;
         if (st && !this.broken) {
           const eng = ll * st.dp1 + phi * st.aPiv - st.gp;
@@ -973,5 +1164,6 @@
     liftMM(depth) { return Math.sin(this.phi) * depth * 1000; }
   }
 
-  return { G, CAB, SHEET, SCALE, CABINETS, cabArea, cabHeight, RESTRAINT, PROFILE_ALPHA, MAX_BALLAST, SF_CAP, BFT_NAME, BFT_SPEED, bftRange, CASES, CASE_KIND, CASE_NAME, QUAKE_ZONES, beaufort, defaults, derive, compareCases, loadFor, lockNet, locksFor, makeRecord, gustN, Sim, sheetBases, clamp, windInfo, scanSys, lamAt };
+  return { G, CAB, SHEET, SCALE, CABINETS, cabArea, cabHeight, RESTRAINT, PROFILE_ALPHA, MAX_BALLAST, SF_CAP, BFT_NAME, BFT_SPEED, bftRange, CASES, CASE_KIND, CASE_NAME, QUAKE_ZONES, beaufort, defaults, derive, compareCases, loadFor, lockNet, locksFor, makeRecord, gustN, Sim, sheetBases, clamp, windInfo, scanSys, lamAt,
+    TERRAIN, terrainOf, turbInt, gustEN, gustOf, wallTop, zRef, EN_WALL_ROWS, enWallRow, enWall, enRule, WIND_SHAPES, cfOf, LOCK_PRESETS, modalOf, dafHarm };
 });

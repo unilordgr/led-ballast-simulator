@@ -35,7 +35,7 @@ console.log('sheet comparison:', checks, 'checks,', fails, 'failures');
 
 /* ---- 3. beam: closed forms for a uniform load on [b, L] ---- */
 {
-  const S = base({ N: 14, EI: 2.9e6, gaRatio: 0.12, mode: 'outdoor', outSpeed: 10, gust: 0, ballastAuto: false, ballastPer: 400 });
+  const S = base({ N: 14, EI: 2.9e6, gaRatio: 0.12, mode: 'outdoor', outSpeed: 10, gust: 0, gustAuto: false, shape: 'sheet', ballastAuto: false, ballastPer: 400 });   // the sheet's pressure, so the beam can be checked by hand
   const D = M.derive(S);
   const b = 0.1, L = b + S.H, q = D.wind.qPeak * S.W, EIw = 14 * 2.9e6, GAw = 0.12 * EIw;
   const tipB = q * (0.75 * Math.pow(L, 4) - L * Math.pow(b, 3) + Math.pow(b, 4) / 4) / (6 * EIw);
@@ -51,7 +51,7 @@ console.log('sheet comparison:', checks, 'checks,', fails, 'failures');
 
 /* ---- 4. restraint behaves like a spring ---- */
 {
-  const mk = (rest, extra) => base(Object.assign({ mode: 'outdoor', outSpeed: 10, gust: 0, ballastAuto: false, ballastPer: 150, rest: Object.assign({ type: 'none', n: 7, a: 0, d: 0, to: 'floor', wll: 2000, slack: 0, anchorKg: 0, side: 'rear' }, rest) }, extra || {}));
+  const mk = (rest, extra) => base(Object.assign({ mode: 'outdoor', outSpeed: 10, gust: 0, gustAuto: false, shape: 'sheet', ballastAuto: false, ballastPer: 150, rest: Object.assign({ type: 'none', n: 7, a: 0, d: 0, to: 'floor', wll: 2000, slack: 0, anchorKg: 0, side: 'rear' }, rest) }, extra || {}));
   const D0 = M.derive(mk({}));
   const Dst = M.derive(mk({ type: 'strap' })), Dca = M.derive(mk({ type: 'cable' })), Dtr = M.derive(mk({ type: 'truss', wll: 10000 }));
   ok('strap helps', Dst.SFact >= D0.SFact - 1e-9, [D0.SFact, Dst.SFact]);
@@ -115,7 +115,7 @@ console.log('sheet comparison:', checks, 'checks,', fails, 'failures');
 
 /* ---- 7. wind gradient raises the load centre ---- */
 {
-  const a = M.derive(base({ mode: 'outdoor', outSpeed: 10, gust: 0, profile: 'uniform' })), b = M.derive(base({ mode: 'outdoor', outSpeed: 10, gust: 0, profile: 'open' }));
+  const a = M.derive(base({ mode: 'outdoor', outSpeed: 10, gust: 0, gustAuto: false, profile: 'uniform' })), b = M.derive(base({ mode: 'outdoor', outSpeed: 10, gust: 0, gustAuto: false, profile: 'open' }));
   ok('gradient: resultant sits higher than mid-height', b.geom.hc > a.geom.hc, [a.geom.hc, b.geom.hc]);
   ok('gradient at 7 m is below the uniform 10 m value', b.F.kgf < a.F.kgf);
 }
@@ -154,7 +154,7 @@ ok('force 1 runs 0.3 to 1.5 m/s', M.bftRange(1).lo === 0.3 && M.bftRange(1).hi =
 ok('force 12 has no top', M.bftRange(12).lo === 32.7 && M.bftRange(12).hi === null, JSON.stringify(M.bftRange(12)));
 for (let n = 1; n <= 12; n++) ok('force ' + n + ' starts just above force ' + (n - 1), Math.abs(M.bftRange(n).lo - (M.bftRange(n - 1).hi + 0.1)) < 1e-9, JSON.stringify([M.bftRange(n - 1), M.bftRange(n)]));
 for (let n = 1; n <= 10; n++) {   // outdoors at the top of a force gives the sheet's pressure for that row, to the table's rounding
-  const W = M.windInfo(base({ mode: 'outdoor', gust: 0, outSpeed: M.BFT_SPEED[n] }));
+  const W = M.windInfo(base({ mode: 'outdoor', gust: 0, gustAuto: false, outSpeed: M.BFT_SPEED[n] }));
   ok('outdoor Beaufort ' + n + ' pressure matches the sheet row', Math.abs(W.qMean - M.SCALE[n].q) < 0.06, [W.qMean, M.SCALE[n].q]);
 }
 
@@ -224,7 +224,7 @@ for (let n = 1; n <= 10; n++) {   // outdoors at the top of a force gives the sh
   ok('a 0.24 g quake topples the sheet wall', r.sim.toppled);
   r = runSim(base({ indoorCase: 'quake' }), 40);
   ok('on the ballast it asks for, the quake does not even lift it', r.sim.maxPhi === 0 && !r.sim.toppled, r.sim.maxPhi);
-  r = runSim(base({ indoorCase: 'sway', sway: { amp: 8, f: 2, bounce: 0 }, ballastAuto: false, ballastPer: 60 }), 40);
+  r = runSim(base({ indoorCase: 'sway', sway: { amp: 8, f: 2, bounce: 0 }, ballastAuto: false, ballastPer: 100 }), 40);        // 2 Hz is close to the wall's own 2.5 Hz, which makes the shake worse
   ok('8 mm of sway at 2 Hz rocks the wall both ways without toppling it', r.sides.has(1) && r.sides.has(-1) && !r.sim.toppled, [...r.sides]);
   r = runSim(base({ indoorCase: 'sway', ballastAuto: false, ballastPer: 60 }), 40);
   ok('5 mm of sway at 1.5 Hz on 60 kg per base never lifts it', r.sim.maxPhi === 0);
@@ -250,7 +250,7 @@ for (let n = 1; n <= 10; n++) {   // outdoors at the top of a force gives the sh
   const events = [
     ['door gust', { indoorCase: 'door', door: { v: 5.4, dur: 0.4 }, ballastAuto: false, ballastPer: 9.055 }, 'u'],
     ['knock', Object.assign(kn2({ kgf: 60, from: 'both' }), { ballastAuto: false, ballastPer: 9.055 }), 'u'],
-    ['earthquake', { indoorCase: 'quake', ballastAuto: false, ballastPer: 30 }, 'lam'],
+    ['earthquake', { indoorCase: 'quake', ballastAuto: false, ballastPer: 100 }, 'lam'],
   ];
   for (const [name, o, key] of events) {
     const { D, sim } = mk(o);
@@ -265,7 +265,7 @@ for (let n = 1; n <= 10; n++) {   // outdoors at the top of a force gives the sh
     ok(name + ': nothing happens in the first second', early === 0, early);
     ok(name + ': the load is gone once the event is over and never comes back', late === 0, late);
     ok(name + ': the wall lifted a little but did not topple', sim.maxPhi > 0 && !sim.toppled && sim.toppledAt === -1, [sim.maxPhi, sim.toppled]);
-    ok(name + ': it comes to rest, flat, after the event', sim.phi === 0 && sim.omega === 0 && lastMove < sim.doneAt + 6, [sim.phi, sim.omega, lastMove, sim.doneAt]);
+    ok(name + ': it comes to rest, flat, after the event (a shaken wall rings for a few seconds first)', sim.phi === 0 && sim.omega === 0 && lastMove < sim.doneAt + (key === 'lam' ? 20 : 6), [sim.phi, sim.omega, lastMove, sim.doneAt]);
   }
 
   // when it does topple it says when, and a restart forgets it
@@ -333,7 +333,7 @@ for (let n = 1; n <= 10; n++) {   // outdoors at the top of a force gives the sh
   }
 
   // the loads of the load in play
-  const lk = (o, so) => base(Object.assign({ locks: Object.assign({ on: true, fixKgf: 0, fixN: 2, lockKgf: 0, lockN: 2, edge: 1, stiff: 1 }, so || {}) }, o || {}));
+  const lk = (o, so) => base(Object.assign({ locks: Object.assign({ on: true, fixKgf: 0, fixN: 2, lockKgf: 0, lockN: 2, pattern: 'edge', edge: 1, stiff: 1 }, so || {}) }, o || {}));
   const forS = (S) => { const D = M.derive(S); return { D, L: M.locksFor(S, D) }; };
   ok('off means nothing is computed', M.locksFor(base(), M.derive(base())) === null);
   let { D: Dl, L } = forS(lk());
@@ -372,6 +372,29 @@ for (let n = 1; n <= 10; n++) {   // outdoors at the top of a force gives the sh
   eq('an earthquake shakes every cabinet by its own weight times the acceleration', qk.F[100] * M.G, 6.6 * 0.24 * M.G, 1e-6);
   ok('a shake pulls them off one way or the other, so it is checked', qk.active);
 
+  // the wind over the cabinets by the zones of EN 1991-1-4 Table 7.9, scaled to carry the same total force
+  { const en = forS(lk({ mode: 'outdoor', outSpeed: 8, profile: 'uniform' }, { pattern: 'en' })).L, ev = forS(lk({ mode: 'outdoor', outSpeed: 8, profile: 'uniform' }, { pattern: 'even' })).L;
+    eq('the zones carry a bit more than an even load, because the wind can arrive at either end: 8 columns of 2.3 over the average', en.load.total / ev.load.total, (8 * 2.3 + 20 * 1.4) / (4 * 2.3 + 24 * 1.4), 1e-6);
+    eq('the end cabinets (zone A, 2.3) feel more than the middle (zone B, 1.4)', en.F[0 * 28 + 0] / en.F[0 * 28 + 14], 2.3 / 1.4, 1e-6);
+    eq('four columns at each end are zone A', en.F[0 * 28 + 3] / en.F[0 * 28 + 4], 2.3 / 1.4, 1e-6);
+    eq('the rows are all alike indoors-style, with no gradient', en.F[0 * 28 + 5] / en.F[13 * 28 + 5], 1, 1e-6);
+    ok('the pattern in use is reported', en.pattern === 'en' && ev.pattern === 'even');
+    const sign = forS(lk({ mode: 'outdoor', W: 3, H: 6, N: 2 }, { pattern: 'en' })).L;
+    ok('a wall narrower than it is high is a signboard: an even load', sign.pattern === 'even', sign.pattern);
+    ok('the busiest cabinet is in zone A', en.peak.fixAt % 28 <= 3 || en.peak.fixAt % 28 >= 24, en.peak.fixAt); }
+
+  // presets of lock strength with their sources
+  ok('there are presets from makers, standards and examples', M.LOCK_PRESETS.some((p) => p.group === 'Makers') && M.LOCK_PRESETS.some((p) => p.group === 'Standard fasteners') && M.LOCK_PRESETS.some((p) => p.group === 'Examples'));
+  ok('every preset says what it is and where the number came from', M.LOCK_PRESETS.every((p) => p.id && p.name && p.note && ['published', 'derived', 'standard', 'example'].indexOf(p.basis) >= 0 && (p.lock || p.fix) && (p.basis === 'example' || p.src.length > 0)));
+  { const roe = M.LOCK_PRESETS.find((p) => p.id === 'roe-bp2'); eq('ROE: 20 panels of 9.35 kg at safety factor 5, the top joint holds 19 of them: 888 kgf, over 2 locks', roe.lock.kgf * roe.lock.n, 5 * 19 * 9.35, 0.001);
+    const cli = M.LOCK_PRESETS.find((p) => p.id === 'planar-cli'); eq('Planar CLI: 1,000 kg per cabinet over 2 locks', cli.lock.kgf * cli.lock.n, 1000, 0);
+    const cla = M.LOCK_PRESETS.find((p) => p.id === 'planar-cla'); eq('Planar CLA: 300 kg per cabinet over 2 locks', cla.lock.kgf * cla.lock.n, 300, 0);
+    eq('M6 8.8: 20.1 mm2 x 800 MPa in kgf', M.LOCK_PRESETS.find((p) => p.id === 'm6').fix.kgf, 20.1 * 800 / 9.8, 0.005);
+    eq('M8 8.8: 36.6 mm2 x 800 MPa in kgf', M.LOCK_PRESETS.find((p) => p.id === 'm8').fix.kgf, 36.6 * 800 / 9.8, 0.005);
+    // with a maker's lock the sheet wall is nowhere near letting go in a draught: the loads are fractions of a kgf
+    const withRoe = forS(lk({}, { lockKgf: roe.lock.kgf, fixKgf: 1640, pattern: 'en' })).L;
+    ok('with realistic lock ratings nothing lets go in a draught, by a wide margin', withRoe.status === 'ok' && withRoe.lamFirst > 100, withRoe.lamFirst); }
+
   // failures within 3% of each other are shown as one step: the steps cover every failure, in order, and add up
   { const g = forS(lk({ indoorCase: 'knock', knock: { kgf: 60, h: 1.2, from: 'rear', dur: 0.3, share: 2 }, ballastAuto: false, ballastPer: 9.055 }, { fixKgf: 6, lockKgf: 6, edge: 1.5 })).L;
     ok('a hard shove on one cabinet with weak locks is one step', g.groups.length === 1 && g.groups[0].lostTotal === 1 && g.groups[0].lost[0] === g.knockAt, JSON.stringify(g.groups.map((x) => [x.lam, x.n, x.lostTotal])));
@@ -393,6 +416,81 @@ for (let n = 1; n <= 10; n++) {   // outdoors at the top of a force gives the sh
   ok('a restart puts the cabinets back', sm.lkI === 0 && sm.lkCount === 0 && sm.lamPeak === 0 && sm.lkLost.every((v) => v === 0));
   sm.setLocks(M.locksFor(wk, Dw)); for (let i = 0; i < 240; i++) sm.step(1 / 240);
   ok('a new but identical lock result does not wipe the state', sm.lkSig === Lw.sig && sm.lamPeak > 0);
+}
+
+/* ---- 12. the wind numbers of the standards, and how the wall vibrates ---- */
+{
+  // EN 1991-1-4: turbulence intensity 1 / ln(z / z0), peak pressure (1 + 7 Iv) times the mean
+  eq('open country at 7.1 m: Iv = 1 / ln(7.1 / 0.05)', M.turbInt('open', 7.1), 1 / Math.log(7.1 / 0.05), 1e-12);
+  eq('its gust: the peak speed is sqrt(1 + 7 Iv) times the mean', M.gustEN('open', 7.1) + 1, Math.sqrt(1 + 7 / Math.log(7.1 / 0.05)), 1e-12);
+  ok('a city is gustier than open country, at the same height', M.gustEN('urban', 7.1) > M.gustEN('suburban', 7.1) && M.gustEN('suburban', 7.1) > M.gustEN('open', 7.1));
+  eq('below the terrain\'s minimum height the minimum is used (2 m for open country)', M.turbInt('open', 0.5), 1 / Math.log(2 / 0.05), 1e-12);
+  eq('the table\'s categories: city is category IV with z0 = 1 m', M.TERRAIN.urban.z0, 1, 0);
+  // EN Table 7.9 and Figure 7.19, worked by hand for the sheet wall: 14 m wide, 7 m high, so length over height 2 uses the first row (A 2.3, B 1.4), and the length is
+  // not over 2 h, so there are only zones A (0 to 0.3 h = 2.1 m from the end the wind arrives at) and B (the rest)
+  { const w = M.enWall(14, 7);
+    eq('the sheet wall has 4 cabinet columns of zone A, at the end the wind arrives at', w.cols.filter((v) => v === 2.3).length, 4, 0);
+    eq('and the other 24 are zone B', w.cols.filter((v) => v === 1.4).length, 24, 0);
+    eq('so the wall-wide coefficient is (4 x 2.3 + 24 x 1.4) / 28', w.mean, (4 * 2.3 + 24 * 1.4) / 28, 1e-12);
+    eq('with the wind able to arrive at either end the cabinets take the larger: 8 columns of zone A', w.env.filter((v) => v === 2.3).length, 8, 0);
+    const long = M.enWall(30, 7);                                     // a longer wall has the zones C and D as well: 2 h = 14 m and 4 h = 28 m
+    eq('and its last cabinets are zone D', long.cols[59], M.enWallRow(30 / 7).D, 0);
+    eq('the cabinets between 2 h and 4 h are zone C', long.cols[Math.floor(20 / 0.5)], M.enWallRow(30 / 7).C, 0); }
+  eq('the table row between length over height 3 and 5 is a straight line', M.enWallRow(4).A, 2.6, 1e-12);
+  eq('beyond 10 the last row is used', M.enWallRow(30).A, 3.4, 0);
+  const out = (o) => base(Object.assign({ mode: 'outdoor' }, o));
+  eq('outdoors, the standard\'s rule gives the sheet wall (4 x 2.3 + 24 x 1.4) / 28', M.cfOf(out()), (4 * 2.3 + 24 * 1.4) / 28, 1e-12);
+  eq('indoors the sheet\'s 1.0 stays', M.cfOf(base()), 1, 0);
+  eq('a wall that is narrower than it is high is a signboard: 1.8', M.cfOf(out({ W: 3, H: 6 })), 1.8, 0);
+  eq('so is one lifted high above the ground', M.cfOf(out({ stage: { on: true, h: 2.5, depth: 6, extra: 2, front: 4.6, deckKgm2: 40, rating: 750, muDeck: 0.4, muFloor: 0.5 } })), 1.8, 0);
+  eq('the wind tunnel preset', M.cfOf(out({ shape: 'roe' })), 1.57, 0); eq('the mesh preset', M.cfOf(out({ shape: 'mesh' })), 0.81, 0);
+  eq('your own number', M.cfOf(out({ shape: 'custom', Cf: 1.23 })), 1.23, 0);
+  eq('the pressure on the wall uses it: the sheet wall outdoors at 10 m/s', M.windInfo(out({ outSpeed: 10 })).qPeak * M.windInfo(out({ outSpeed: 10 })).cf, 0.625 * 100 * Math.pow(1 + M.gustEN('open', 7.1), 2) * (4 * 2.3 + 24 * 1.4) / 28, 1e-9);
+  eq('a wall is taken at its top for the gust: 7.1 m for the sheet wall', M.zRef(out()), 7.1, 1e-12);
+  eq('a signboard (narrow wall) at its middle: 3.1 m for a 6 m board on the ground', M.zRef(out({ W: 3, H: 6 })), 0.1 + 3, 1e-12);
+  eq('and a wall lifted high on a stage too: stage 2.5 m + 0.1 + half of 7 m', M.zRef(out({ stage: { on: true, h: 2.5, depth: 6, extra: 2, front: 4.6, deckKgm2: 40, rating: 750, muDeck: 0.4, muFloor: 0.5 } })), 2.5 + 0.1 + 3.5, 1e-12);
+  ok('with the gust on auto the typed gust is not used, with it off it is', M.windInfo(out({ gust: 0.1 })).gust === M.gustEN('open', 7.1) && M.windInfo(out({ gust: 0.1, gustAuto: false })).gust === 0.1);
+  { const a = M.derive(out({ outSpeed: 8 })), b = M.derive(out({ outSpeed: 8, shape: 'sheet', gustAuto: false, gust: 0.3 }));
+    ok('with the standard\'s coefficient and gust a wall needs more ballast outdoors than with the sheet\'s 1.0 and 30% gusts', a.req.per > 2 * b.req.per, [a.req.per, b.req.per]); }
+
+  // the first mode: Rayleigh's quotient against the closed form for a uniform cantilever without shear (f = 1.8751^2 / (2 pi) sqrt(EI / (m L^4)))
+  { const S = base({ EI: 5e6, gaRatio: 1e9 }), D = M.derive(S), L = 7.1, EIw = 14 * 5e6, mp = (D.Ws + D.Wf) / L;
+    eq('the wall\'s own frequency matches the closed form for a uniform cantilever', D.modal.f1, 1.8751 * 1.8751 / (2 * Math.PI) * Math.sqrt(EIw / (mp * Math.pow(L, 4))), 0.01);
+    eq('and the period is its inverse', D.modal.T1, 1 / D.modal.f1, 1e-12); }
+  { const slim = M.derive(base({ gaRatio: 1e9 })).modal.f1, shear = M.derive(base({ gaRatio: 0.12 })).modal.f1;
+    ok('shear flexibility lowers the frequency', shear < slim, [shear, slim]);
+    ok('a stiffer frame raises it', M.derive(base({ EI: 8e6 })).modal.f1 > M.derive(base({ EI: 2e6 })).modal.f1);
+    ok('so does a shorter wall', M.derive(base({ H: 4 })).modal.f1 > M.derive(base({ H: 8 })).modal.f1); }
+  // a steady shake: the closed form |1 + k r^2 / (1 - r^2 + 2 i zeta r)| for the first mode
+  { const sw = (f, o) => M.derive(base(Object.assign({ indoorCase: 'sway', sway: { amp: 5, f, bounce: 0 } }, o))), D = sw(1.5), k = D.modal.kW, z = D.modal.zeta, r = 1.5 / D.modal.f1;
+    const hand = (rr) => { const dr = 1 - rr * rr, di = 2 * z * rr, m2 = dr * dr + di * di; return Math.hypot(1 + k * rr * rr * dr / m2, k * rr * rr * di / m2); };
+    eq('the sway amplification at 1.5 Hz follows the closed form', D.dyn.W, Math.max(1, hand(r)), 1e-9);
+    eq('a slow shake is hardly amplified', sw(0.2).dyn.W, 1, 0.05);
+    const res = sw(D.modal.f1);
+    ok('shaking at the wall\'s own frequency amplifies it by about k / (2 zeta)', res.dyn.W > 0.9 * k / (2 * z) && res.dyn.W < 1.1 * k / (2 * z), [res.dyn.W, k / (2 * z)]);
+    ok('more damping, less resonance', sw(D.modal.f1, { zeta: 0.03 }).dyn.W < res.dyn.W / 2);
+    { const man = { ballastAuto: false, ballastPer: 400 }, lively = sw(D.modal.f1, Object.assign({ zeta: 0.005 }, man)), damped = sw(D.modal.f1, Object.assign({ zeta: 0.2 }, man));
+      ok('on the same ballast the lively wall has the lower safety factor, because its shake is amplified', lively.dyn.W > damped.dyn.W && lively.SFact < damped.SFact, [lively.SFact, damped.SFact]); }
+    ok('far above its frequency the wall is not given credit for being isolated', sw(8).dyn.W === 1); }
+  // the earthquake record through the first mode: a light, lively wall gets more than a stiff one, and less damping gives more
+  { const q = (o) => M.derive(base(Object.assign({ indoorCase: 'quake' }, o)));
+    ok('a quake amplifies a wall whose own period is in the record\'s range', q().dyn.W > 2, q().dyn.W);
+    ok('a very stiff wall just follows the floor', q({ EI: 3e9 }).dyn.W < 1.1, q({ EI: 3e9 }).dyn.W);
+    ok('less damping, more amplification', q({ zeta: 0.005 }).dyn.W > q({ zeta: 0.03 }).dyn.W);
+    ok('the code minimum load is static', M.derive(base({ indoorCase: 'notional' })).dyn.W === 1); }
+  // in the simulation the first mode gives the same amplification as the closed form once the shake is steady
+  { const S = base({ indoorCase: 'sway', sway: { amp: 5, f: 1.5, bounce: 0 }, ballastAuto: false, ballastPer: 400 }), D = M.derive(S), sim = new M.Sim(); sim.setRig(D, S); sim.reset();
+    const r = D.shake.fwd, A = r.m[0] * r.y[0] + r.m[1] * r.y[1], acc = r.acc;
+    let mx = 0; for (let i = 0; i < 90 * 240; i++) { sim.step(1 / 240); if (sim.t > 60) mx = Math.max(mx, Math.abs(sim.lam * acc * A - r.modal.B * sim.qdd)); }
+    eq('the simulated base moment of the screen and frame, steady, is the closed form times the rigid one', mx / (acc * A), D.dyn.W, 0.03);
+    ok('and the top moves by the static amount times a similar factor', Math.abs(sim.qMax * r.modal.w * r.modal.w / (r.modal.Gamma * acc) - 1 / Math.abs(1 - Math.pow(1.5 / D.modal.f1, 2))) < 0.1, [sim.qMax, sim.q]); }
+  // EN 1991-1-4 structural factor for wind: the wall's size takes load off the gusts, a very lively wall adds some back
+  { const D = M.derive(base({ mode: 'outdoor' }));
+    ok('the sheet wall outdoors: the size effect gives a factor below 1, which is not counted as a relief', D.wcs.cscd < 1 && D.wind.dyn === 1, D.wcs.cscd);
+    const soft = M.derive(base({ mode: 'outdoor', H: 12, EI: 0.15e6, zeta: 0.005 }));
+    ok('a tall wall on a very light frame has a low frequency and a much larger resonance part', soft.modal.f1 < D.modal.f1 / 5 && soft.wcs.R2 > 5 * D.wcs.R2, [soft.modal.f1, soft.wcs.R2, D.wcs.R2]);
+    ok('the factor never goes above what a bigger background and resonance give', D.wcs.cscd > 0.7 && D.wcs.cscd < 1.2);
+    ok('it is applied to the wind force', soft.wind.cfTot >= soft.wind.cf - 1e-12); }
 }
 
 const D1 = M.derive(base({ mode: 'outdoor' }));

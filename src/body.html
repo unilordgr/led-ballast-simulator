@@ -47,6 +47,7 @@
           <button type="button" role="menuitem" data-ex="knock">Knock<small>a 60 kgf shove at 1.2 m high</small></button>
           <button type="button" role="menuitem" data-ex="weaklock">Weak locks<small>a hard shove pops one cabinet off</small></button>
           <button type="button" role="menuitem" data-ex="wobble">Stage wobble<small>1.2 m stage that sways</small></button>
+          <button type="button" role="menuitem" data-ex="resonance">Resonance<small>the stage shakes at the wall's own frequency</small></button>
           <button type="button" role="menuitem" data-ex="quake">Earthquake<small>0.24 g, the sheet wall</small></button>
           <div class="menu-h">Outdoors</div>
           <button type="button" role="menuitem" data-ex="breeze">Outdoor breeze<small>8 m/s with gusts</small></button>
@@ -144,6 +145,11 @@
         <p class="hint" id="lockIntro">Finds which cabinet’s lock lets go first. We do not know your lock ratings, so you type them in: it is a what-if, not a prediction.</p>
         <div id="lockBox" hidden>
         <div class="ctl">
+          <label for="lockPreset">Lock strengths from <small>a known lock, or type your own</small></label>
+          <select id="lockPreset" class="sel"></select>
+          <p class="hint" id="lockPresetNote"></p>
+        </div>
+        <div class="ctl">
           <label for="LF-n">Frame fixing strength <small>holds a cabinet to the back frame</small></label>
           <div class="ctl-line"><input type="range" id="LF-r" min="0" max="1000" step="1" aria-label="Frame fixing strength slider"><span class="field"><input type="number" id="LF-n" min="0" max="20000" step="any" inputmode="decimal"><span class="u">kgf</span></span></div>
           <p class="hint" id="LF-h"></p>
@@ -160,6 +166,15 @@
         <div class="ctl">
           <label for="LM-n">Locks per joint <small>between two cabinets</small></label>
           <div class="ctl-line"><input type="range" id="LM-r" min="0" max="8" step="1" aria-label="Locks per joint slider"><span class="field"><input type="number" id="LM-n" min="0" max="16" step="1" inputmode="numeric"><span class="u">×</span></span></div>
+        </div>
+        <div class="ctl" id="ctlLkPat">
+          <label for="lkPattern">How the wind is spread over the cabinets</label>
+          <select id="lkPattern" class="sel">
+            <option value="en">EN 1991-1-4 zones: more at the ends</option>
+            <option value="edge">A plain factor on the top and side edges</option>
+            <option value="even">The same on every cabinet</option>
+          </select>
+          <p class="hint" id="lkPattern-h"></p>
         </div>
         <div class="ctl">
           <label for="LE-n">Extra wind on the edges <small>top and sides, 1 = even</small></label>
@@ -351,6 +366,7 @@
           <div class="ctl">
             <label for="SQ-n">Back and forth</label>
             <div class="ctl-line"><input type="range" id="SQ-r" min="0.3" max="5" step="0.1" aria-label="Sway frequency slider"><span class="field"><input type="number" id="SQ-n" min="0.1" max="10" step="0.1" inputmode="decimal"><span class="u">Hz</span></span></div>
+            <p class="hint" id="SQ-h"></p>
           </div>
           <div class="ctl">
             <label for="SB-n">Up and down too <small>share of g</small></label>
@@ -381,6 +397,7 @@
           <div class="ctl">
             <label for="QD-n">Shaking lasts</label>
             <div class="ctl-line"><input type="range" id="QD-r" min="4" max="30" step="1" aria-label="Shaking duration slider"><span class="field"><input type="number" id="QD-n" min="3" max="60" step="1" inputmode="numeric"><span class="u">s</span></span></div>
+            <p class="hint" id="QD-h"></p>
           </div>
         </div>
         <div id="caseNotional" hidden>
@@ -402,9 +419,14 @@
             <p class="hint" id="V-h"></p>
           </div>
           <div class="ctl">
-            <label for="GU-n">Gusts <small>extra speed at the peaks</small></label>
-            <div class="ctl-line"><input type="range" id="GU-r" min="0" max="80" step="5" aria-label="Gust strength slider"><span class="field"><input type="number" id="GU-n" min="0" max="100" step="5" inputmode="numeric"><span class="u">%</span></span></div>
+            <label for="GU-n">Gusts <small>extra speed at the peaks</small> <button type="button" class="btn sm" id="btnAutoGust" aria-pressed="true" title="Use the standard's gust for your terrain and the wall's height">Auto</button></label>
+            <div class="ctl-line"><input type="range" id="GU-r" min="0" max="100" step="5" aria-label="Gust strength slider"><span class="field"><input type="number" id="GU-n" min="0" max="100" step="5" inputmode="numeric"><span class="u">%</span></span></div>
             <p class="hint" id="GU-h"></p>
+          </div>
+          <div class="ctl">
+            <label for="shapeSel">Wind shape <small id="SH-v"></small></label>
+            <select id="shapeSel" class="sel"></select>
+            <p class="hint" id="SH-h"></p>
           </div>
           <div class="ctl">
             <div class="lab">Wind gets stronger with height</div>
@@ -472,6 +494,16 @@
         <div class="ctl">
           <label for="MU-n">Floor friction <small>sheet: assumed big enough</small></label>
           <div class="ctl-line"><input type="range" id="MU-r" min="0.1" max="1" step="0.05" aria-label="Friction slider"><span class="field"><input type="number" id="MU-n" min="0.05" max="1.5" step="0.05" inputmode="decimal"><span class="u">µ</span></span></div>
+        </div>
+        <div class="ctl">
+          <label for="ZT-n">Damping <small>of the wall's own vibration</small></label>
+          <div class="ctl-line"><input type="range" id="ZT-r" min="0.2" max="5" step="0.1" aria-label="Damping slider"><span class="field"><input type="number" id="ZT-n" min="0.2" max="20" step="0.1" inputmode="decimal"><span class="u">%</span></span></div>
+          <p class="hint" id="ZT-h"></p>
+        </div>
+        <div class="ctl">
+          <label for="SR-n">Load sharing between bases <small>for uneven ballast</small></label>
+          <div class="ctl-line"><input type="range" id="SR-r" min="0" max="100" step="5" aria-label="Load sharing slider"><span class="field"><input type="number" id="SR-n" min="0" max="100" step="5" inputmode="numeric"><span class="u">%</span></span></div>
+          <p class="hint" id="SR-h"></p>
         </div>
         <div class="ctl">
           <label for="LS-n">Lock stiffness <small>against a frame fixing</small></label>
@@ -564,6 +596,7 @@
           <div class="tk dn" id="tkReq" style="left:50%"><span>needs 1.50</span></div>
         </div>
         <p class="vtext" id="vText" aria-live="polite"></p>
+        <p class="vtext" id="shareText" hidden></p>
       </section>
       <section class="sec" id="cmpSec" hidden>
         <h2>Indoor loads compared <span class="sub">on your ballast</span></h2>
@@ -664,6 +697,16 @@
           <span id="bendStrapKey"><i style="background:#ffb020"></i>Strap attach point</span>
         </div>
         <p class="hint" id="bendNote"></p>
+      </section>
+      <section class="sec" id="vibSec">
+        <h2>How it vibrates <span class="sub">first sideways mode</span></h2>
+        <div class="tiles">
+          <div class="tile"><div class="k">Own frequency</div><div class="v" id="vbF">0<small>Hz</small></div><div class="s" id="vbFS"></div></div>
+          <div class="tile"><div class="k">Period</div><div class="v" id="vbT">0<small>s</small></div><div class="s" id="vbTS"></div></div>
+          <div class="tile"><div class="k" id="vbAK">Shake amplified</div><div class="v" id="vbA">1<small>×</small></div><div class="s" id="vbAS"></div></div>
+          <div class="tile"><div class="k">Gusts, EN 1991-1-4</div><div class="v" id="vbW">1<small>×</small></div><div class="s" id="vbWS"></div></div>
+        </div>
+        <p class="hint" id="vibNote"></p>
       </section>
       <section class="sec">
         <h2>Moment balance <span class="sub">about the tipping toe, kg·m</span></h2>

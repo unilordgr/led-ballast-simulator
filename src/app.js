@@ -28,6 +28,8 @@ function normalize() {
   S.kgm2 = clamp(S.kgm2, 1, 200);
   S.SF = clamp(S.SF, 1, 3);
   S.Cf = clamp(S.Cf, 0.1, 3);
+  S.zeta = clamp(+S.zeta || 0.01, 0.002, 0.2); S.share = clamp(S.share === undefined ? 1 : +S.share, 0, 1); S.gustAuto = S.gustAuto !== false;
+  if (['auto', 'custom'].concat(M.WIND_SHAPES.map((p) => p.id)).indexOf(S.shape) < 0) S.shape = 'auto';
   S.depth = clamp(S.depth, 0.3, 5);
   S.mu = clamp(S.mu, 0.05, 1.5);
   S.outSpeed = clamp(S.outSpeed, 0, 60);
@@ -52,6 +54,8 @@ function normalize() {
   R.n = clamp(Math.round(R.n || 0), 0, 60); R.a = Math.max(0, R.a || 0); R.d = Math.max(0, R.d || 0);
   R.wll = clamp(R.wll, 50, 50000); R.slack = clamp(R.slack, 0, 2000); R.anchorKg = clamp(R.anchorKg, 0, 10000);
   const lk = S.locks;
+  if (['en', 'edge', 'even'].indexOf(lk.pattern) < 0) lk.pattern = 'en';
+  if (lk.preset !== 'custom' && !M.LOCK_PRESETS.some((p) => p.id === lk.preset)) lk.preset = 'custom';
   lk.on = !!lk.on; lk.fixKgf = clamp(+lk.fixKgf || 0, 0, 20000); lk.lockKgf = clamp(+lk.lockKgf || 0, 0, 20000);
   lk.fixN = clamp(Math.round(lk.fixN) || 1, 1, 16); lk.lockN = clamp(Math.round(lk.lockN) || 0, 0, 16); lk.edge = clamp(+lk.edge || 1, 1, 4); lk.stiff = clamp(+lk.stiff || 1, 0.1, 10);
   if (S.autoN) S.N = M.sheetBases(S);
@@ -161,7 +165,7 @@ function newWall() {                               // a fresh wall; the last one
   toast('New wall: everything is back to the starting values.', true);
 }
 const EXAMPLE_NAMES = { sheet: 'Sheet wall', noballast: 'No ballast', draft: 'Strong draught', front: 'Front draught', door: 'Door gust', knock: 'Knock', wobble: 'Stage wobble', quake: 'Earthquake',
-  weaklock: 'Weak locks', breeze: 'Outdoor breeze', gale: 'Outdoor gale', stage: 'On a stage', straps: 'Top straps' };
+  weaklock: 'Weak locks', resonance: 'Resonance', breeze: 'Outdoor breeze', gale: 'Outdoor gale', stage: 'On a stage', straps: 'Top straps' };
 function applyExample(name, quiet) {               // an example is a whole wall: it replaces every setting (Undo brings yours back)
   if (!quiet) undoSnap = clone(S);
   setState(null); ui.selected = -1; fillCabModels();
@@ -174,6 +178,9 @@ function applyExample(name, quiet) {               // an example is a whole wall
   if (name === 'wobble') {
     S.indoorCase = 'sway'; S.sway = { amp: 9, f: 2, bounce: 0.1 }; S.ballastAuto = false; S.ballastPer = 60; S.ballast = null;
     S.stage.on = true; S.stage.h = 1.2; S.stage.depth = 6; S.stage.front = 4.6;
+  }
+  if (name === 'resonance') {                         // the stage shakes at the wall's own frequency (about 2.5 Hz for this wall)
+    S.indoorCase = 'sway'; S.sway = { amp: 2, f: 2.5, bounce: 0 }; S.ballastAuto = false; S.ballastPer = 100; S.ballast = null;
   }
   if (name === 'quake') { S.indoorCase = 'quake'; S.quake = { pga: 0.24, floor: 1, dur: 12 }; sheetBallast(); }
   if (name === 'weaklock') {
@@ -195,7 +202,7 @@ const loadScenario = (name) => applyExample(name, true);      // kept for tests 
 
 /* ------------------------------------------------------------------ Start and End simulation */
 function currentLoadText() {
-  if (S.mode === 'outdoor') return 'Wind: Beaufort ' + M.beaufort(S.outSpeed) + ', ' + nf1(S.outSpeed) + ' m/s' + (S.gust > 0 ? ' with gusts' : '');
+  if (S.mode === 'outdoor') return 'Wind: Beaufort ' + M.beaufort(S.outSpeed) + ', ' + nf1(S.outSpeed) + ' m/s' + (D && D.wind.gust > 0 ? ' with gusts' : '');
   return M.CASE_NAME[S.indoorCase] + ': ' + loadSummary(S.indoorCase);
 }
 function syncRunUI() {
@@ -224,7 +231,8 @@ function checkFinish() {                           // a toppled wall ends the ru
   const off = sim.lk && sim.lkLost ? sim.lkCount : 0, offTxt = off ? lockPlural(off, 'cabinet', 'cabinets') : '';
   if (sim.toppled && sim.phi > 1.2) { finishRun({ kind: 'toppled', text: 'The wall toppled after ' + nf1(sim.toppledAt) + ' s.' + (off ? ' ' + offTxt + ' had come off before that.' : '') }); return; }
   const done = sim.doneAt;
-  if (done !== null && !sim.toppled && sim.t > done + 3.5) {
+  const ringing = sim.qMax > 0 && Math.hypot(sim.q, sim.qd / (D.modal.f1 * 6.2832)) > 0.1 * sim.qMax && sim.t < done + 15;      // a shaken wall rings for a while after the shaking stops
+  if (done !== null && !sim.toppled && sim.t > done + 3.5 && !ringing) {
     const lean = sim.maxPhi * 180 / Math.PI, lift = Math.sin(sim.maxPhi) * D.geom.depth * 1000;
     const brief = D.status === 'tipping' ? ' It held only because the load was brief.' : '';          // the safety factor above treats the load as lasting
     finishRun({ kind: off ? 'lost' : 'held', text: (off ? 'The wall held, but ' + offTxt + (off === 1 ? ' came' : ' came') + ' off. ' : '') + (sim.maxPhi < 2e-4 ? 'It did not even lift.' : 'Leaned at most ' + nf(lean, lean < 0.1 ? 2 : lean < 10 ? 1 : 0) + '°, the base lifted ' + nf(lift, lift < 100 ? 1 : 0) + ' mm.') + brief });
@@ -327,6 +335,8 @@ function renderLocks() {
   if (!L) return;
   const sf = nf2(S.SF);
   setText('lockText', lockSentence(L));
+  { const p = M.LOCK_PRESETS.find((x) => x.id === S.locks.preset);
+    setHintLinks('lockPresetNote', p ? ({ published: 'Published. ', derived: '', standard: '', example: '' }[p.basis]) + p.note : 'Makers rarely publish the pull-off strength of a lock. Pick one of the examples here, or ask the manufacturer for the tested pull-out and shear load.', p ? p.src : []); }
   setText('lkLoadK', L.kind === 'wind' ? 'Wind on one cabinet' : L.kind === 'accel' ? 'Shaking on one cabinet' : 'Push on the cabinet');
   setText('lkLoad', nf1(L.kind === 'force' ? L.load.max : L.load.mean) + ' ');
   $('lkLoad').appendChild(el('small', null, 'kgf'));
@@ -440,21 +450,36 @@ function initControls() {
   bindPair('NP', { get: () => S.notional.pct, set: (v) => (S.notional.pct = v), fmt: (v) => (+v).toFixed(1) });
   bindPair('V', { get: () => S.outSpeed, set: (v) => (S.outSpeed = v), fmt: (v) => (+v).toFixed(1) });
   bindPair('BF', { get: () => M.beaufort(S.outSpeed), set: (n) => { S.outSpeed = M.BFT_SPEED[clamp(Math.round(n), 0, 12)]; }, fmt: (v) => String(Math.round(v)) });
-  bindPair('GU', { get: () => S.gust * 100, set: (v) => (S.gust = v / 100), fmt: (v) => String(Math.round(v)) });
+  bindPair('GU', { get: () => (D ? D.wind.gust : S.gust) * 100, set: (v) => { S.gust = v / 100; S.gustAuto = false; }, fmt: (v) => String(Math.round(v)) });
+  $('btnAutoGust').addEventListener('click', () => { S.gustAuto = !S.gustAuto; if (!S.gustAuto) S.gust = D.wind.gust; update(); });
+  const fillSel = (id, opts) => { const sel = $(id); sel.textContent = ''; for (const [v, t, grp] of opts) { let host = sel; if (grp) { host = [...sel.querySelectorAll('optgroup')].find((g) => g.label === grp) || sel.appendChild(el('optgroup')); host.label = grp; } const o = el('option', null, t); o.value = v; host.appendChild(o); } };
+  fillSel('shapeSel', [['auto', 'Automatic (the standard outdoors)'], ...M.WIND_SHAPES.map((p) => [p.id, p.name + (p.cf == null ? '' : ' · ' + nf2(p.cf))]), ['custom', 'My own number (Advanced)']]);
+  $('shapeSel').addEventListener('change', () => { S.shape = $('shapeSel').value; update(); });
+  fillSel('lockPreset', [['custom', 'Type my own'], ...M.LOCK_PRESETS.map((p) => [p.id, p.name, p.group])]);
+  $('lockPreset').addEventListener('change', () => {
+    const p = M.LOCK_PRESETS.find((x) => x.id === $('lockPreset').value), lk = S.locks;
+    lk.preset = p ? p.id : 'custom';
+    if (p && p.lock) { lk.lockKgf = p.lock.kgf; lk.lockN = p.lock.n; }
+    if (p && p.fix) { lk.fixKgf = p.fix.kgf; lk.fixN = p.fix.n; }
+    update();
+  });
+  $('lkPattern').addEventListener('change', () => { S.locks.pattern = $('lkPattern').value; update(); });
+  bindPair('ZT', { get: () => S.zeta * 100, set: (v) => (S.zeta = v / 100), fmt: (v) => (+v).toFixed(1) });
+  bindPair('SR', { get: () => S.share * 100, set: (v) => (S.share = v / 100), fmt: (v) => String(Math.round(v)) });
   bindPair('FA', { get: () => S.facing, set: (v) => (S.facing = v), fmt: (v) => String(Math.round(v)) });
   bindPair('DIR', { get: () => S.windDir, set: (v) => (S.windDir = v), fmt: (v) => String(Math.round(v)) });
   bindPair('SF', { get: () => S.SF, set: (v) => (S.SF = v), fmt: (v) => (+v).toFixed(2) });
-  bindPair('CF', { get: () => S.Cf, set: (v) => (S.Cf = v), fmt: (v) => (+v).toFixed(2) });
+  bindPair('CF', { get: () => (D ? D.wind.cf : S.Cf), set: (v) => { S.Cf = v; S.shape = 'custom'; }, fmt: (v) => (+v).toFixed(2) });
   bindPair('DP', { get: () => S.depth, set: (v) => (S.depth = v), fmt: (v) => (+v).toFixed(3) });
   bindPair('MU', { get: () => S.mu, set: (v) => (S.mu = v), fmt: (v) => (+v).toFixed(2) });
   bindPair('STM', { get: () => S.stage.muDeck, set: (v) => (S.stage.muDeck = v), fmt: (v) => (+v).toFixed(2) });
   bindPair('EI', { get: () => S.EI / 1e6, set: (v) => (S.EI = v * 1e6), fmt: (v) => (+v).toFixed(2), toSlider: (mn) => EI_POS(mn), fromSlider: (pos) => EI_MN(pos) });
   bindPair('DL', { get: () => S.defLimit, set: (v) => (S.defLimit = v), fmt: (v) => String(Math.round(v)) });
   // cabinet locks
-  bindPair('LF', { get: () => S.locks.fixKgf, set: (v) => (S.locks.fixKgf = Math.max(0, v)), fmt: fmtKgf, toSlider: kgfToPos, fromSlider: posToKgf });
-  bindPair('LL', { get: () => S.locks.lockKgf, set: (v) => (S.locks.lockKgf = Math.max(0, v)), fmt: fmtKgf, toSlider: kgfToPos, fromSlider: posToKgf });
-  bindPair('LN', { get: () => S.locks.fixN, set: (v) => (S.locks.fixN = Math.round(v)), fmt: (v) => String(Math.round(v)) });
-  bindPair('LM', { get: () => S.locks.lockN, set: (v) => (S.locks.lockN = Math.round(v)), fmt: (v) => String(Math.round(v)) });
+  bindPair('LF', { get: () => S.locks.fixKgf, set: (v) => { S.locks.fixKgf = Math.max(0, v); S.locks.preset = 'custom'; }, fmt: fmtKgf, toSlider: kgfToPos, fromSlider: posToKgf });
+  bindPair('LL', { get: () => S.locks.lockKgf, set: (v) => { S.locks.lockKgf = Math.max(0, v); S.locks.preset = 'custom'; }, fmt: fmtKgf, toSlider: kgfToPos, fromSlider: posToKgf });
+  bindPair('LN', { get: () => S.locks.fixN, set: (v) => { S.locks.fixN = Math.round(v); S.locks.preset = 'custom'; }, fmt: (v) => String(Math.round(v)) });
+  bindPair('LM', { get: () => S.locks.lockN, set: (v) => { S.locks.lockN = Math.round(v); S.locks.preset = 'custom'; }, fmt: (v) => String(Math.round(v)) });
   bindPair('LE', { get: () => S.locks.edge, set: (v) => (S.locks.edge = v), fmt: (v) => (+v).toFixed(2) });
   bindPair('LS', { get: () => S.locks.stiff, set: (v) => (S.locks.stiff = v), fmt: (v) => (+v).toFixed(2), toSlider: (v) => 1000 * (Math.log10(clamp(v, 0.1, 10)) + 1) / 2, fromSlider: (pos) => Math.round(Math.pow(10, pos / 500 - 1) * 100) / 100 });
   segs.lock = bindSeg('segLock', (v) => { S.locks.on = v === 'on'; update(); });
@@ -516,7 +541,7 @@ function initControls() {
   $('btnUseNeed').addEventListener('click', () => { setBallastAll(Math.ceil(D.req.per * 10) / 10); update(); });
   $('btnReset').addEventListener('click', () => {                                  // only the advanced values: the wall is left alone
     const d = M.defaults();
-    S.EI = d.EI; S.gaRatio = d.gaRatio; S.defLimit = d.defLimit; S.Cf = d.Cf; S.depth = d.depth; S.mu = d.mu; S.stage.muDeck = d.stage.muDeck; S.frame = Object.assign({}, d.frame);
+    S.EI = d.EI; S.gaRatio = d.gaRatio; S.defLimit = d.defLimit; S.Cf = d.Cf; S.shape = d.shape; S.gustAuto = d.gustAuto; S.zeta = d.zeta; S.share = d.share; S.depth = d.depth; S.mu = d.mu; S.stage.muDeck = d.stage.muDeck; S.frame = Object.assign({}, d.frame);
     update(); toast('Advanced values are back to the sheet’s.', false);
   });
   $('btnInset').addEventListener('click', () => { ui.showInset = !ui.showInset; $('btnInset').setAttribute('aria-pressed', String(ui.showInset)); });
@@ -539,7 +564,9 @@ function syncControls() {
   segs.stage.set(S.stage.on ? 'on' : 'off'); segs.rest.set(S.rest.type); segs.rto.set(S.rest.to); segs.rside.set(S.rest.side); segs.prof.set(S.profile);
   segs.cam.set(ui.cam); segs.exag.set(ui.exag);
   segs.lock.set(S.locks.on ? 'on' : 'off'); segs.lkLam.set(ui.lkLam); $('lockBox').hidden = !S.locks.on; $('lockIntro').hidden = S.locks.on;
-  $('LE-n').closest('.ctl').hidden = D.loadKind !== 'wind';                      // the extra wind on the edges is a wind thing
+  $('shapeSel').value = S.shape; $('lkPattern').value = S.locks.pattern; $('lockPreset').value = S.locks.preset; $('btnAutoGust').setAttribute('aria-pressed', String(S.gustAuto));
+  $('ctlLkPat').hidden = D.loadKind !== 'wind';                                  // how the wind is spread is a wind thing
+  $('LE-n').closest('.ctl').hidden = D.loadKind !== 'wind' || S.locks.pattern !== 'edge';
   const indoorNow = S.mode === 'indoor', cs = indoorNow ? S.indoorCase : 'outdoor';
   $('indoorPick').hidden = !indoorNow; $('cmpSec').hidden = !indoorNow;
   $('windIndoor').hidden = !(indoorNow && cs === 'draught'); $('windOutdoor').hidden = indoorNow;
@@ -568,6 +595,13 @@ function dirText(deg) {
   return (m < 90 ? 'rear' : 'front') + '-' + (a > 0 ? 'right' : 'left');
 }
 function setText(id, s) { const e = $(id); if (e.textContent !== s) e.textContent = s; }
+function setHintLinks(id, text, links, cls) {                 // a hint with its sources as links
+  const e = $(id); e.className = 'hint' + (cls ? ' ' + cls : ''); e.textContent = text;
+  for (const [label, url] of links) {
+    e.appendChild(document.createTextNode(' '));
+    if (/^https?:/.test(url)) { const a = el('a', null, label); a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer'; e.appendChild(a); } else e.appendChild(document.createTextNode('(' + label + ')'));
+  }
+}
 function setHint(id, s, cls) { const e = $(id); setText(id, s); e.className = 'hint' + (cls ? ' ' + cls : ''); }
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 const ICON = { ok: 'i-check', wn: 'i-warn', bd: 'i-x', in: 'i-info' };
@@ -593,6 +627,8 @@ function renderText() {
   const needBtn = $('btnUseNeed'); needBtn.hidden = S.ballastAuto || D.req.none || D.req.capped || Math.abs(D.req.per - avg) < 0.05; needBtn.textContent = 'Use ' + nf1(Math.ceil(D.req.per * 10) / 10) + ' kg per base';
   setText('posNote', 'arm ' + nf(g.aB, 3) + ' m from the toe');
   const lc = S.locks;
+  setHint('ZT-h', 'Share of critical damping for the wall\'s own vibration. EN 1991-1-4 Table F.2 gives 0.3 to 0.8% for bolted steel lattices; the joints between cabinets add some. Less damping means a bigger resonance.');
+  setHint('SR-h', S.share >= 0.999 ? 'The wall acts as one piece, as the sheet assumes: the total ballast is shared out over the bases.' : S.share <= 0.001 ? 'Each base stands on its own, so the weakest base decides.' : nf0(S.share * 100) + '% of the way from each base on its own to the wall as one piece.' + ' It only matters when the ballast is uneven.');
   setHint('LF-h', lc.fixKgf > 0 ? nf2(lc.fixKgf * M.G / 1000) + ' kN. The load one fixing holds before it lets go.' : 'Not entered, so no fixing will let go. Type the load it breaks at (1 kN is about 102 kgf).');
   setHint('LL-h', lc.lockKgf > 0 ? nf2(lc.lockKgf * M.G / 1000) + ' kN. The load one lock holds before it lets go.' : 'Not entered, so no cabinet lock will let go. Type the load it breaks at.');
   setHint('LE-h', lc.edge > 1.001 ? 'Cabinets on the top edge and the side edges feel ' + nf2(lc.edge) + '× the wind, corner cabinets more. Real walls feel more there.' : 'The same wind on every cabinet.');
@@ -608,7 +644,13 @@ function renderText() {
   setHint('BF-h', 'Force ' + bn + ': ' + bfRange + '. A force sets the top of its range, as in the sheet. Type m/s for an exact speed.');
   setText('V-v', nf0(kmh(S.outSpeed)) + ' km/h');
   setHint('V-h', nf1(0.625 * S.outSpeed * S.outSpeed) + ' N/m² of wind pressure on average' + (w.bft >= 7 ? '. Peak gusts reach Beaufort ' + w.bft + ', above the sheet limit (below 7).' : ''), w.bft >= 7 ? 'warn' : '');
-  setHint('GU-h', 'Peak wind ' + nf1(S.outSpeed * (1 + S.gust)) + ' m/s (Beaufort ' + M.beaufort(S.outSpeed * (1 + S.gust)) + '). The design check uses the peak.');
+  { const zt = M.zRef(S), iv = M.turbInt(S.profile, zt), ter = M.terrainOf(S.profile), enG = M.gustEN(S.profile, zt);
+    setHint('GU-h', (S.gustAuto ? 'Auto. EN 1991-1-4 for ' + ter.name + ' (category ' + ter.cat + ') at ' + nf1(zt) + ' m: turbulence ' + nf0(iv * 100) + '%, so the peak pressure is ' + nf2(1 + 7 * iv) + '× the mean, which is ' + nf0(enG * 100) + '% extra speed. '
+      : 'Typed by you. The standard gives ' + nf0(enG * 100) + '% for ' + ter.name + ' at ' + nf1(zt) + ' m. ') + 'Peak wind ' + nf1(w.vPeak) + ' m/s (Beaufort ' + M.beaufort(w.vPeak) + '). The design check uses the peak.');
+    const sh = S.shape === 'auto' ? (outdoor ? 'en' : 'sheet') : S.shape, pr0 = M.WIND_SHAPES.find((x) => x.id === sh);
+    setText('SH-v', 'Cf ' + nf2(w.cf));
+    setHintLinks('SH-h', (S.shape === 'auto' ? 'Automatic: ' : '') + (sh === 'en' ? (M.enRule(S) === 'wall' ? 'a wall near the ground and longer than it is high, so the net coefficients of EN 1991-1-4 Table 7.9 (2.3 within 0.3 h of the end the wind arrives at, 1.4 and below further along) averaged over its ' + nf1(S.W) + ' m give ' + nf2(w.cf) + '. ' : 'a signboard, 1.8 (EN 1991-1-4 7.4.3). ') : pr0 ? pr0.note + ' ' : S.shape === 'custom' ? 'Your own number, ' + nf2(S.Cf) + ', from Advanced. ' : '') + 'The sheet uses 1.0.',
+      pr0 && pr0.src ? [[/^https?:/.test(pr0.src) ? 'Source' : pr0.src, pr0.src]] : []); }
   setHint('PROF-h', S.profile === 'uniform' ? 'The sheet applies the same pressure over the whole screen.' : 'Wind speed grows with height as (z/10 m)^' + nf2(M.PROFILE_ALPHA[S.profile]) + ', measured at 10 m' + (stg ? ' and counted from the floor, so the stage raises the screen into stronger wind.' : '.') + ' Under 3 m it stays constant.');
   setText('FA-v', 'faces ' + compassName(S.facing) + ' (' + Math.round(S.facing) + '°)');
   const bearing = (S.facing + 180 + S.windDir) % 360;
@@ -653,16 +695,18 @@ function renderText() {
     msg = (D.req.none ? 'The weight of the screen and frame' + (stg ? ', the stage' : '') + (sp ? ' and your straps' : '') + ' alone covers the wind with the margin you asked for. ' : '') +
       'With ' + nf1(avg) + ' kg on each of ' + D.N + ' bases, what holds the screen down is ' + sfTxt(D.SFact) + '× the wind (you need ' + nf2(S.SF) + '×). ' +
       (sp && D.lean.hangs ? 'At the ' + PKW() + ' it leans ' + nf(D.lean.phi * 180 / Math.PI, 1) + '° and hangs on the ' + RT_NAME(sp.type) + 's, so add ballast to keep the base down. ' : '') +
-      (strapHolds ? 'The straps hold it, so tipping is no longer the limit. Check the anchors, the frame and the cabinet connectors. ' : 'It would start to tip at about ' + nf1(D.limits.vCritMean) + ' m/s' + (outdoor && S.gust > 0 ? ' mean wind' : '') + ' (Beaufort ' + M.beaufort(D.limits.vCritMean) + '). ') +
+      (strapHolds ? 'The straps hold it, so tipping is no longer the limit. Check the anchors, the frame and the cabinet connectors. ' : 'It would start to tip at about ' + nf1(D.limits.vCritMean) + ' m/s' + (outdoor && w.gust > 0 ? ' mean wind' : '') + ' (Beaufort ' + M.beaufort(D.limits.vCritMean) + '). ') +
       (stg ? 'The weaker check is that ' + govText() + '.' : '');
   } else if (status === 'marginal') {
-    msg = 'It will not tip, but it holds only ' + nf2(D.SFact) + '× the wind and you need ' + nf2(S.SF) + '×. Add about ' + nf1(Math.max(0, D.req.per - avg)) + ' kg to each base, to ' + nf1(D.req.per) + ' kg.' + (stg ? ' The weaker check is that ' + govText() + '.' : '');
+    msg = 'It will not tip, but it holds only ' + nf2(D.SFact) + '× the wind and you need ' + nf2(S.SF) + '×. ' + (D.uneven ? 'The ballast is uneven: put more on the lightest bases, or spread it out. ' : 'Add about ' + nf1(Math.max(0, D.req.per - avg)) + ' kg to each base, to ' + nf1(D.req.per) + ' kg.') + (stg ? ' The weaker check is that ' + govText() + '.' : '');
   } else {
     msg = 'The wind is ' + nf2(1 / D.SFact) + '× what holds it down, so ' + govText() + '. It needs at least ' + nf1(need1) + ' kg per base to stay up, and ' + nf1(D.req.per) + ' kg for your ' + nf2(S.SF) + '× margin.' +
       (D.gov === 'S' ? ' A lower stage, a heavier deck, moving the screen back from the front edge, or straps to the floor all help.' : sp ? ' The straps run out of rating or anchor before the wind does.' : stg ? ' A strap to the floor would help too.' : '');
   }
   if (D.req.capped) msg += ' The required ballast is beyond what the solver allows (' + nf0(M.MAX_BALLAST) + ' kg per base). Use more bases, a deeper base, straps or less wind.';
   setText('vText', msg);
+  { const sh = $('shareText'); sh.hidden = !D.uneven;
+    if (D.uneven) { const wk = D.local.indexOf(Math.min(...D.local)) + 1; sh.textContent = 'The ballast is uneven. Taken one base at a time, the weakest (base ' + wk + ') holds ' + sfTxt(D.sfInd) + '× the wind; the wall as one piece holds ' + sfTxt(D.sfShared) + '×. With the wall sharing ' + nf0(D.share * 100) + '% of the load between bases (Advanced), the figure above is ' + sfTxt(D.SFact) + '×.'; } }
 
   $('tNeedPer').firstChild.textContent = D.req.none ? '0' : nf(D.req.per); setText('tNeedTot', D.req.none ? 'none needed' + (!sp && !stg ? ' (sheet: ' + nf1(D.req.totalRaw) + ' kg)' : '') : nf1(D.req.total) + ' kg in total');
   $('tYourPer').firstChild.textContent = nf(avg); setText('tYourTot', nf1(D.Wb) + ' kg in total');
@@ -674,7 +718,7 @@ function renderText() {
   $('tTip').firstChild.textContent = lv.infin ? '∞' : lv.crit; $('tTip').querySelector('small').textContent = lv.infin ? '' : lv.unit;
   setText('tTipS', lv.infin ? lv.none : lv.critS);
 
-  renderBend(); renderMoments(); renderChecks(); renderSheet(); renderTables(); renderIndoor(); renderStrip(avg); renderLocks();
+  renderBend(); renderVibration(); renderMoments(); renderChecks(); renderSheet(); renderTables(); renderIndoor(); renderStrip(avg); renderLocks();
   setText('planInfo', isWind ? nf0(w.cn * 100) + '% pushes the screen · ' + nf0(Math.abs(w.sinT) * 100) + '% slides along it'
     : kindL === 'force' ? (S.knock.from === 'both' ? 'the push is checked from the front and from the rear' : 'push from the ' + S.knock.from)
     : 'the floor moves front to back; the wall tips whichever way is weaker');
@@ -713,7 +757,7 @@ function limitView() {
   const kAllow = strapLim ? 'Within the strap rating up to' : 'Holds, with margin, up to';
   const kTip = strapLim ? 'Straps reach their rating at' : (D.gov === 'S' ? 'Stage and wall tip at' : 'Tips over at');
   if (L.kind === 'speed') {
-    const gustMean = S.mode === 'outdoor' && S.gust > 0, bft = (v) => 'Beaufort ' + M.beaufort(v) + ' · ' + nf0(kmh(v)) + ' km/h' + (gustMean ? ' mean' : '');
+    const gustMean = S.mode === 'outdoor' && D.wind.gust > 0, bft = (v) => 'Beaufort ' + M.beaufort(v) + ' · ' + nf0(kmh(v)) + ' km/h' + (gustMean ? ' mean' : '');
     return { infin: !isFinite(L.vAllowMean), kAllow, kTip, unit: 'm/s', allow: nf1(L.vAllowMean), crit: nf1(L.vCritMean), allowS: bft(L.vAllowMean), critS: bft(L.vCritMean), none: 'no wind load',
       critFull: nf1(L.vCritMean) + ' m/s' + (gustMean ? ' mean wind' : '') + ' (Beaufort ' + M.beaufort(L.vCritMean) + ')' };
   }
@@ -781,6 +825,8 @@ function renderIndoor() {
     setHint('KS-h', 'The push is carried by ' + S.knock.share + ' of ' + D.N + ' bases, about ' + nf1(S.knock.share * D.spacing) + ' m of wall, and the rest of the wall helps in proportion.');
   }
   if (cs === 'sway') {
+    const dy = D.dyn, near = dy.r > 0.75 && dy.r < 1.3;
+    setHint('SQ-h', 'The wall\'s own frequency is ' + nf2(D.modal.f1) + ' Hz (period ' + nf2(D.modal.T1) + ' s). This shake is ' + nf2(dy.r) + '× that, so the wall amplifies it ' + nf2(dy.W) + '×.' + (near ? ' That is close to resonance: a crowd jumping near this frequency would shake the wall much harder. Change the wall\'s stiffness or height, or the frequency.' : dy.r > 1.45 ? ' Well above its own frequency the wall is not given credit for any relief.' : ''), near ? 'warn' : '');
     setText('SA-v', nf(swayG(), 3) + ' g peak');
     setHint('SA-h', 'The deck moves ' + nf1(S.sway.amp) + ' mm each way at ' + nf1(S.sway.f) + ' Hz, so the wall feels ' + nf(swayG(), 3) + ' g. This wall tips at ' + (isFinite(D.limits.crit) ? nf(D.limits.crit, 3) : '∞') + ' g.' +
       (S.sway.bounce > 0 ? ' Up and down shaking of ' + nf2(S.sway.bounce) + ' g makes it lighter at the peaks.' : ''));
@@ -788,6 +834,7 @@ function renderIndoor() {
   if (cs === 'quake') {
     const fa = S.quake.floor;
     setText('QP-v', nf2(S.quake.pga) + ' g');
+    setHint('QD-h', 'The wall\'s own frequency is ' + nf2(D.modal.f1) + ' Hz (period ' + nf2(D.modal.T1) + ' s). Run through the earthquake record, the wall\'s first mode amplifies the shaking ' + nf2(D.dyn.W) + '× (damping ' + nf1(S.zeta * 100) + '%). A stiffer or shorter wall amplifies less.', D.dyn.W > 3 ? 'warn' : '');
     setText('QF-v', fa < 1.02 ? 'ground floor' : '×' + nf2(fa));
     setHint('QP-h', 'Greek zones: I 0.16 g, II 0.24 g, III 0.36 g. With your margin this wall ' + zonesHeld(D.limits.allow / fa) + '; it tips at ' + (isFinite(D.limits.crit) ? nf(D.limits.crit / fa, 3) : '∞') + ' g at the ground.' + (fa > 1.02 ? ' An upper floor shakes ' + nf2(fa) + '× harder (EN 1998-1, rigid element up to 2.5×).' : ''));
   }
@@ -818,6 +865,19 @@ function renderStrip(avg) {                         // the verdict strip under t
   setText('vsLoad', currentLoadText());
 }
 
+function renderVibration() {
+  const m = D.modal, dy = D.dyn, cs = D.loadCase, w = D.wind;
+  const tile = (id, v, sub, small) => { setText(id, v + ' '); $(id).appendChild(el('small', null, small)); setText(id + 'S', sub); };
+  tile('vbF', nf2(m.f1), 'the wall on its base, bending and shear (EI in Advanced)', 'Hz');
+  tile('vbT', nf2(m.T1), 'a shake or gust that repeats at this rate meets resonance', 's');
+  setText('vbAK', cs === 'quake' ? 'Earthquake amplified' : 'Sway amplified');
+  if (dy.kind === 'sway') tile('vbA', nf2(dy.W), 'this shake is ' + nf2(dy.r) + '× the wall\'s own frequency', '×');
+  else if (dy.kind === 'quake') tile('vbA', nf2(dy.W), 'the first mode run through the earthquake record', '×');
+  else tile('vbA', '–', 'only sway and earthquake', '');
+  if (D.wcs) tile('vbW', nf2(w.dyn), 'the standard\'s structural factor is ' + nf2(D.wcs.cscd) + (D.wcs.cscd < 1 ? ', not counted as a relief' : ''), '×');
+  else tile('vbW', '–', 'outdoor wind only', '');
+  setText('vibNote', 'Damping is ' + nf1(S.zeta * 100) + '% of critical (EN 1991-1-4 Table F.2 gives 0.3 to 0.8% for bolted steel lattices; joints and locks add some). The frequency is the first mode from Rayleigh\'s quotient on the same beam as the bending. Straps and the stage are not counted in it. A shake is amplified by |1 + k r² / (1 − r² + 2iζr)| and never counted as less than 1.');
+}
 function renderBend() {
   const b = D.bend, sp = D.strap, L = b.L, topAbs = Math.abs(b.topEl);
   const topMm = topAbs * 1000, ratio = topAbs > 1e-9 ? L / topAbs : Infinity;
@@ -923,7 +983,7 @@ function renderChecks() {
 function renderSheet() {
   $('sheetBox').hidden = D.loadKind !== 'wind';                    // the sheet only knows wind
   const t = $('sheetTable'); t.textContent = '';
-  const eff = D.wind.qPeak * D.wind.cn * S.Cf;
+  const eff = D.wind.qPeak * D.wind.cn * D.wind.cfTot;
   const R = [
     ['h', 'Inputs'], ['Width of screen (m)', nf(S.W, 1), 'A4'], ['Height of screen (m)', nf(S.H, 1), 'B4'], ['Weight of cabinet (kg/m²)', nf(S.kgm2, 1), 'C4'],
     ['Safety factor', nf2(S.SF), 'D4'], ['Wind scale (Beaufort)', S.mode === 'indoor' ? String(S.indoorScale) : 'outdoor', 'E4'], ['Wind direction', D.dir, 'F4'],
